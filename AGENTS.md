@@ -43,6 +43,17 @@ docs/                          this repo's KB (GitMark: plans, decisions, ops)
 Same as OntoShip's: markdown + git is the source of truth; everything derived
 (`.gitmark/`, `*-map.html`) is regenerated, never committed.
 
+## First clone (bootstrap)
+
+Корневой `.omp/` не в git (сгенерируемая копия) — после свежего клона соберите
+его, иначе dogfood-навыки/команды и `gitmark` недоступны:
+
+```bash
+./scripts/sync-package.sh          # plugins/ontoship/{skills,commands,rules,scripts} -> .omp/
+python3 .omp/skills/kb-search/gitmark.py index
+python3 -m pytest tests/           # канон — plugins/ontoship/.../gitmark.py
+```
+
 ## Maintain
 
 ```bash

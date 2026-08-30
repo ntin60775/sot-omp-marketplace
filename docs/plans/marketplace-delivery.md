@@ -26,8 +26,9 @@ OntoShip-движок (skills + commands + rules + `gitmark.py`) станови�
 
 ## Done
 
-- Каталог `.omp-plugin/marketplace.json`: `name: "sot-omp-marketplace"`,
-  запись `ontoship` с `source: "./plugins/ontoship"`, `version: "0.2.0"`.
+- Каталог `.omp-plugin/marketplace.json` засеян (`name: "sot-omp-marketplace"`,
+  `plugins: []`); первый релиз добавляет запись `ontoship` с
+  `source: "./plugins/ontoship"`, `version: "0.2.0"`.
 - `plugins/ontoship/package.json` (`name: "ontoship"`, `version`) — метаданные
   и источник для `gitmark version`; авторитетна для upgrade версия каталога
   (фолбэк на манифесты внутри плагина не читается — проверено, даёт 0.0.0),
@@ -43,18 +44,28 @@ OntoShip-движок (skills + commands + rules + `gitmark.py`) станови�
   (`/ontoship:upgrade` — пакетный апгрейд по реестру `~/ontoship-projects.txt`,
   для каждого проекта: `omp plugin upgrade` + пересборка индекса; без реестра —
   текущий проект).
-- `gitmark.py`: `version` читает `package.json` рядом с собой; авто-резолв
+- `gitmark.py`: `version` читает `package.json` подъёмом от скрипта
+  (канон `plugins/ontoship/package.json`, dogfood `.omp/package.json`, корень
+  плагина в кэше потребителя); фолбэк — константа `VERSION`. Авто-резолв
   корня — по cwd (не по расположению скрипта) — проверить тестом.
-- Dogfood: `scripts/sync-package.sh` (есть) + проверка, что корневой `.omp/`
-  после синхронизации даёт этому репо рабочие `/kb`, `/ship`, правила;
-  `gitmark lint`/`index` чистые в обоих репо.
+- `scripts/sync-package.sh` копирует в `.omp/` также `package.json` (иначе
+  dogfood-копия не видит версию).
+- `deploy-check.sh` переработан под плагин: движок находится через `skill://`
+  с фолбэком на `.omp/skills/kb-search/gitmark.py`; проверки AGENTS.md,
+  bootstrap KB и gitignore-строк остаются.
 - Миграция клиента `ontoship-omp`: install `ontoship@sot-omp-marketplace`
-  (user-scope), снос `.omp/skills|commands|rules` из рабочего дерева репо,
-  `AGENTS.md`/`docs/` остаются; в `docs/ops/deploy-ontoship.md` (клиентский) —
-  поток установки. Runbook релиза — `docs/ops/release-ontoship.md` здесь.
+  (user-scope), снос `.omp/skills|commands|rules|scripts` и `tests/` из
+  рабочего дерева репо (тесты gitmark живут здесь), `AGENTS.md`/`docs/`
+  остаются; в `docs/ops/deploy-ontoship.md` (клиентский) — поток установки.
+  Runbook релиза — `docs/ops/release-ontoship.md` здесь.
 - ADR `docs/decisions/marketplace-delivery.md`: доставка = omp-маркетплейс,
   разработка в каталоге; уточняет ADR `omp-only-package` клиента (тот запрет
   был про Claude Code marketplace, omp-нативный канал не противоречит).
+- Уже сделано при переезде (2026-08-30): каталог-заглушка,
+  `plugins/ontoship/package.json` (0.1.0), `LICENSE`, `tests/test_gitmark.py`
+  (канон — `plugins/ontoship/.../gitmark.py`, 9 passed), bootstrap-секция в
+  `AGENTS.md`, реестр `docs/reference/commands.md` перенацелен на
+  `plugins/ontoship/` вместо gitignore-копии.
 
 ## Scope
 

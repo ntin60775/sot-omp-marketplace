@@ -6,7 +6,7 @@ status: active
 updated: 2026-08-28
 tags: [commands, slash-commands, reference]
 links:
-  documents: [../../.omp/commands/kb.md, ../../.omp/commands/kb-map.md, ../../.omp/commands/doc.md, ../../.omp/commands/onto-doc.md, ../../.omp/commands/grill.md, ../../.omp/commands/grilling.md, ../../.omp/commands/architecture.md, ../../.omp/commands/code-review.md, ../../.omp/commands/to-tickets.md, ../../.omp/commands/handoff.md, ../../.omp/commands/prototype.md, ../../.omp/commands/ship.md]
+  documents: [../../plugins/ontoship/commands/kb.md, ../../plugins/ontoship/commands/kb-map.md, ../../plugins/ontoship/commands/doc.md, ../../plugins/ontoship/commands/onto-doc.md, ../../plugins/ontoship/commands/grill.md, ../../plugins/ontoship/commands/grilling.md, ../../plugins/ontoship/commands/architecture.md, ../../plugins/ontoship/commands/code-review.md, ../../plugins/ontoship/commands/to-tickets.md, ../../plugins/ontoship/commands/handoff.md, ../../plugins/ontoship/commands/prototype.md, ../../plugins/ontoship/commands/ship.md]
   relates_to: [../services/gitmark-cli/README.md, ../services/dev-flow/README.md]
 ---
 

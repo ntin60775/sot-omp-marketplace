@@ -1,0 +1,9 @@
+{
+  "name": "sot-omp-marketplace",
+  "owner": { "name": "sothale" },
+  "metadata": {
+    "description": "Личный маркетплейс omp-плагинов. Каталог пуст до первого релиза: ontoship v0.2.0 появится по docs/plans/marketplace-delivery.md.",
+    "version": "0.0.0"
+  },
+  "plugins": []
+}
