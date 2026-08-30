@@ -10,3 +10,9 @@ updated: 2026-08-30
 
 - [commands.md](commands.md) — реестр команд/навыков плагина `ontoship`
   (генерируется `gitmark inventory`)
+- [gitmark-ontology.md](gitmark-ontology.md) — онтология GitMark: словари, инварианты
+  I1–I7, мини-парсер frontmatter
+- [marketplace-catalog.md](marketplace-catalog.md) — контракт каталога
+  `.omp-plugin/marketplace.json`: версии, source, scope, кэш
+- [ontoship-package.md](ontoship-package.md) — анатомия плагина `ontoship` и
+  dogfood-механизм `sync-package.sh`
