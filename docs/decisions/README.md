@@ -5,7 +5,7 @@ service: _platform
 status: active
 updated: 2026-08-30
 links:
-  relates_to: [marketplace-topology.md, ../plans/marketplace-delivery.md]
+  relates_to: [marketplace-topology.md, ../plans/marketplace-delivery/README.md]
 ---
 
 # Decisions

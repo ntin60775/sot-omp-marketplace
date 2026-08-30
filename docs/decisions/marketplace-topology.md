@@ -6,7 +6,7 @@ status: active
 updated: 2026-08-30
 links:
   documents: [../../.omp-plugin/marketplace.json, ../../scripts/sync-package.sh]
-  relates_to: [../../AGENTS.md, ../plans/marketplace-delivery.md]
+  relates_to: [../../AGENTS.md, ../plans/marketplace-delivery/README.md]
 ---
 
 # ADR: Топология маркетплейса (принята 2026-08-30)
@@ -54,5 +54,5 @@ OntoShip (GitMark KB + dev-flow) переезжает в этот репозит
 
 Принята 2026-08-30. Граница: здесь фиксируется **только топология**. ADR о
 самой доставке (`docs/decisions/marketplace-delivery.md`) — ещё не выполненный
-пункт [плана поставки](../plans/marketplace-delivery.md) (раздел «Done»), и
+пункт [плана поставки](../plans/marketplace-delivery/README.md) (раздел «Done»), и
 она появится вместе с его реализацией.

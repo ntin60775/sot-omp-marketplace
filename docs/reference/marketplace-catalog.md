@@ -6,7 +6,7 @@ status: active
 updated: 2026-08-30
 links:
   documents: [../../.omp-plugin/marketplace.json, ../../README.md]
-  relates_to: [../plans/marketplace-delivery.md, ontoship-package.md]
+  relates_to: [../plans/marketplace-delivery/README.md, ontoship-package.md]
 ---
 
 # Контракт каталога маркетплейса
@@ -34,7 +34,7 @@ links:
 **Текущее состояние: `plugins: []`, version `0.0.0` — каталог пуст до первого
 релиза.** Первая запись `ontoship` (`source: "./plugins/ontoship"`,
 `version: "0.2.0"`) появится по плану
-[marketplace-delivery.md](../plans/marketplace-delivery.md).
+[marketplace-delivery](../plans/marketplace-delivery/README.md).
 
 ## Авторитет версии
 

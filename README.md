@@ -8,7 +8,7 @@
 
 | Плагин | Что это | Статус |
 |---|---|---|
-| [ontoship](plugins/ontoship/) | GitMark KB (md+git, FTS5-поиск, онтология-линтер) + dev-flow: план → тикеты → ship | переезжает из `ntin60775/ontoship-omp` (работа по `docs/plans/marketplace-delivery.md`) |
+| [ontoship](plugins/ontoship/) | GitMark KB (md+git, FTS5-поиск, онтология-линтер) + dev-flow: план → тикеты → ship | переезжает из `ntin60775/ontoship-omp` (работа по `docs/plans/marketplace-delivery/`) |
 
 ## Установка (после первой публикации)
 

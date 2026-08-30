@@ -20,7 +20,7 @@ docs/                          this repo's KB (GitMark: plans, decisions, ops)
 
 ## Topology decision (2026-08-30)
 
-- All further development per `docs/plans/marketplace-delivery.md` happens **here**,
+- All further development per `docs/plans/marketplace-delivery/` happens **here**,
   not in `ontoship-omp`.
 - The plugin is published from this repo: catalog entry `source: "./plugins/ontoship"`
   (relative — no git-subdir indirection). Release = bump `version` in
@@ -34,7 +34,7 @@ docs/                          this repo's KB (GitMark: plans, decisions, ops)
 
 ## Start here
 
-- **The plan** → [docs/plans/marketplace-delivery.md](docs/plans/marketplace-delivery.md)
+- **The plan** → [docs/plans/marketplace-delivery/](docs/plans/marketplace-delivery/README.md)
 - **OntoShip package source** → [plugins/ontoship/](plugins/ontoship/)
 - **The catalog** → [.omp-plugin/marketplace.json](.omp-plugin/marketplace.json)
 

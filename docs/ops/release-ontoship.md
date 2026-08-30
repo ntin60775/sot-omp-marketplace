@@ -6,7 +6,7 @@ status: active
 updated: 2026-08-30
 links:
   documents: [../../.omp-plugin/marketplace.json, ../../plugins/ontoship/package.json, ../../scripts/sync-package.sh, ../../plugins/ontoship/scripts/deploy-check.sh]
-  relates_to: [../plans/marketplace-delivery.md, ../reference/marketplace-catalog.md]
+  relates_to: [../plans/marketplace-delivery/README.md, ../reference/marketplace-catalog.md]
 ---
 
 # Релиз плагина ontoship
@@ -23,7 +23,7 @@ links:
 - [plugins/ontoship/package.json](../../plugins/ontoship/package.json) —
   `version: 0.1.0` (переездная заглушка, не опубликована).
 - **Первый релиз (ontoship `0.2.0`) ещё не сделан** — он является предметом
-  плана [marketplace-delivery.md](../plans/marketplace-delivery.md)
+  плана [marketplace-delivery](../plans/marketplace-delivery/README.md)
   (`status: draft`) и до его выполнения этот runbook описывает будущий
   повторяемый цикл, а не действующую операцию.
 

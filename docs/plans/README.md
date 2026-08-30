@@ -11,5 +11,5 @@ updated: 2026-08-30
 Форма и жизненный цикл как в OntoShip (`kb-curate`): файл-план → `/to-tickets` →
 папка с тикетами → `/ship` по одному тикету.
 
-- [marketplace-delivery.md](marketplace-delivery.md) — переезд OntoShip в формат
-  плагина этого каталога; поставка обновлений через `/marketplace`
+- [marketplace-delivery](marketplace-delivery/README.md) — переезд OntoShip в формат
+  плагина этого каталога; поставка обновлений через `/marketplace` (папка с тикетами)

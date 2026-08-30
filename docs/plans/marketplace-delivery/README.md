@@ -5,8 +5,8 @@ service: _platform
 status: draft
 updated: 2026-08-30
 links:
-  depends_on: [README.md, ../README.md]
-  documents: [../../plugins/ontoship/commands, ../../plugins/ontoship/rules]
+  depends_on: [../README.md, ../../README.md]
+  documents: [../../../plugins/ontoship/commands, ../../../plugins/ontoship/rules]
 ---
 
 # Контракт: поставка обновлений через omp-маркетплейс
@@ -66,6 +66,10 @@ OntoShip-движок (skills + commands + rules + `gitmark.py`) станови�
   (канон — `plugins/ontoship/.../gitmark.py`, 9 passed), bootstrap-секция в
   `AGENTS.md`, реестр `docs/reference/commands.md` перенацелен на
   `plugins/ontoship/` вместо gitignore-копии.
+- Уже сделано на сборке KB (2026-08-30): runbook `docs/ops/release-ontoship.md`,
+  ADR топологии `docs/decisions/marketplace-topology.md`, вся остальная KB
+  (`docs/services/`, `docs/reference/`, `docs/ops/`) — план переведён в
+  форму папки этим прогоном `/to-tickets`.
 
 ## Scope
 
@@ -104,3 +108,18 @@ OntoShip-движок (skills + commands + rules + `gitmark.py`) станови�
 7. `ref` на несуществующий тег падает явной ошибкой клона; git-subdir на скрытый
    `.omp` работает (наследие старой топологии — больше не используется, источник
    теперь relative `./plugins/ontoship`).
+
+## Tickets
+
+Порядок — по зависимостям; `/ship` — строго по одному, последовательно.
+
+1. [01-версия-из-манифеста](01-version-from-manifest.md) — `gitmark version`
+   читает `package.json`, sync копирует манифест в `.omp/` — draft, без блокировщиков.
+2. [02-CLI на skill://](02-skill-path-migration.md) — перевод всех ссылок плагина
+   + переработка `deploy-check.sh` — draft, без блокировщиков (независим от 01).
+3. [03-init/upgrade](03-init-upgrade-commands.md) — новые команды плагина —
+   draft, blocked by 02.
+4. [04-релиз 0.2.0](04-first-release-020.md) — запись в каталоге, bump, тег,
+   ADR доставки — draft, blocked by 01–03.
+5. [05-миграция клиента](05-client-migration.md) — `ontoship-omp` ставит плагин,
+   снос копий — draft, blocked by 04 (чужой репо, отдельный прогон).
