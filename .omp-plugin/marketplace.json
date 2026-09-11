@@ -24,10 +24,10 @@
       "source": {
         "source": "url",
         "url": "git@github.com:ntin60775/1c-omp.git",
-        "ref": "v0.1.0"
+        "ref": "v0.1.1"
       },
       "description": "Контур 1С-разработки: правила BSL, гейты Unica, навыки развёртывания контура. Ставится на уровень проекта и требует unica@unica.",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "category": "development",
       "keywords": ["1c", "bsl", "unica", "v8-runner", "vanessa", "yaxunit"]
     }
