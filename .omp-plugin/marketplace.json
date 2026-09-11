@@ -3,9 +3,22 @@
   "owner": { "name": "sothale" },
   "metadata": {
     "description": "Личный маркетплейс omp-плагинов: контур 1С-разработки (1c) и KB/dev-flow (ontoship)",
-    "version": "0.1.0"
+    "version": "0.2.0"
   },
   "plugins": [
+    {
+      "name": "ontoship",
+      "source": {
+        "source": "git-subdir",
+        "url": "git@github.com:ntin60775/ontoship-omp.git",
+        "path": ".omp",
+        "ref": "v0.2.0"
+      },
+      "description": "База знаний на markdown+git и dev-flow: поиск по KB, курация, контракт ship. Предметно-независим — ставится в любой проект, не только 1С.",
+      "version": "0.2.0",
+      "category": "development",
+      "keywords": ["kb", "gitmark", "dev-flow", "documentation"]
+    },
     {
       "name": "1c",
       "source": {
