@@ -2,12 +2,18 @@
 node_type: plan
 title: Поставка OntoShip через маркетплейс (переезд разработки в sot-omp-marketplace)
 service: _platform
-status: draft
-updated: 2026-08-30
+status: archived
+updated: 2026-09-11
 links:
   depends_on: [../README.md, ../../README.md]
   documents: [../../../plugins/ontoship/commands, ../../../plugins/ontoship/rules]
 ---
+
+> **Не исполнять.** Подход этого плана (каталог и дом разработки в одном
+> репозитории, относительный источник, догфуд-копия через `sync-package.sh`)
+> заменён решением [«доставка плагинами»](../../decisions/plugin-delivery.md)
+> от 2026-09-11: плагины живут в своих репозиториях и подключаются по тегу.
+> Тикеты оставлены как история.
 
 # Контракт: поставка обновлений через omp-маркетплейс
 

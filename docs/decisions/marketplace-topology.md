@@ -2,12 +2,15 @@
 node_type: decision
 title: Топология маркетплейса: один репо = каталог + дом разработки
 service: _platform
-status: active
-updated: 2026-08-30
+status: deprecated
+updated: 2026-09-11
 links:
-  documents: [../../.omp-plugin/marketplace.json, ../../scripts/sync-package.sh]
-  relates_to: [../../AGENTS.md, ../plans/marketplace-delivery/README.md]
+  documents: [../../.omp-plugin/marketplace.json]
+  relates_to: [../../AGENTS.md, ../plans/marketplace-delivery/README.md, ./plugin-delivery.md]
 ---
+
+> **Заменён.** Актуальная топология — [доставка плагинами](./plugin-delivery.md)
+> (принята 2026-09-11). Ниже — историческая запись, не руководство к действию.
 
 # ADR: Топология маркетплейса (принята 2026-08-30)
 

@@ -34,7 +34,8 @@ point: [../AGENTS.md](../AGENTS.md).
 ## Decisions
 
 - [Decisions](decisions/README.md) — ADR:
-  [топология маркетплейса](decisions/marketplace-topology.md) (принята 2026-08-30)
+  [доставка плагинами](decisions/plugin-delivery.md) (принята 2026-09-11;
+  заменяет [прежнюю топологию](decisions/marketplace-topology.md) от 2026-08-30)
 
 ## Plans
 
