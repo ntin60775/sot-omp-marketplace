@@ -5,15 +5,14 @@ service: _platform
 status: active
 updated: 2026-08-30
 links:
-  documents: [../../plugins/ontoship/package.json, ../../scripts/sync-package.sh, ../../plugins/ontoship/scripts/deploy-check.sh]
-  relates_to: [marketplace-catalog.md, commands.md, ../../AGENTS.md]
+  relates_to: [marketplace-catalog.md, ../../AGENTS.md]
 ---
 
 # Анатомия плагина `ontoship`
 
 Пакет `plugins/ontoship/` — канонное дерево плагина (единственный источник истины):
 GitMark KB (md+git, FTS5-поиск, онтология-линтер) + dev-flow «план → тикеты → ship».
-Версия манифеста [`package.json`](../../plugins/ontoship/package.json) — `0.1.0`
+Версия манифеста `package.json` — `0.1.0`
 (метаданные; для канала обновлений авторитетна версия каталога, см.
 [контракт каталога](marketplace-catalog.md)).
 
@@ -46,7 +45,7 @@ plugins/ontoship/
   scripts/deploy-check.sh      проверка развёртывания пакета в проекте
 ```
 
-Полные описания команд/навыков — генерируемый [реестр](commands.md) (руками не
+Полные описания команд/навыков — генерируемый реестр (руками не
 правится, синхронизация `gitmark inventory`).
 
 ## Dogfood-механизм
@@ -59,7 +58,7 @@ plugins/ontoship/
 ./scripts/sync-package.sh --check   # доложить о дрейфе (exit 1), ничего не меняя
 ```
 
-[`scripts/sync-package.sh`](../../scripts/sync-package.sh) делает `rm -rf` + `cp -r`
+`scripts/sync-package.sh` делает `rm -rf` + `cp -r`
 четырёх каталогов и вычищает `__pycache__`. Следствия:
 
 - руками в `.omp/` не правят — правка умрёт при ближайшей синхронизации; источник —
@@ -74,7 +73,7 @@ plugins/ontoship/
 
 ## Проверка развёртывания
 
-[`plugins/ontoship/scripts/deploy-check.sh`](../../plugins/ontoship/scripts/deploy-check.sh)
+`plugins/ontoship/scripts/deploy-check.sh`
 в проекте-потребителе: `exit 0` — пакет на месте и работает; `1` — критические
 проблемы (нет ключевых файлов `.omp/`, SQLite без FTS5, сломан индекс); `2` —
 предупреждения (нет trigram-токенайзера → ограничен fuzzy-поиск; `docs/` не

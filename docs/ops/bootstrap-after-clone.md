@@ -1,60 +1,28 @@
 ---
 node_type: runbook
-title: Первичная сборка репозитория после свежего клона
+title: KB после свежего клона
 service: _platform
 status: active
-updated: 2026-08-30
+updated: 2026-09-11
 links:
-  documents: [../../scripts/sync-package.sh, ../../AGENTS.md, ../../tests/test_gitmark.py]
-  relates_to: [release-ontoship.md, ../reference/ontoship-package.md]
+  relates_to: [../../AGENTS.md, ../reference/gitmark-ontology.md]
 ---
 
-# Bootstrap после свежего клона
+# KB после свежего клона
 
-Корневой `.omp/` этого репозитория **не в git** — это генерируемая dogfood-копия
-дерева `plugins/ontoship/{skills,commands,rules,scripts}` (см. AGENTS.md
-§Topology decision). Без неё dogfood-навыки, команды и сам `gitmark` в этом
-репо недоступны, поэтому после каждого свежего клона (или `git clean` в `.omp/`)
-соберите окружение заново.
-
-## Шаги
+Корневой `.omp/` не в git — он собирается **установкой плагина** `ontoship`, а не
+скриптом синхронизации: собственной копии пакета в репозитории нет намеренно.
 
 ```bash
-./scripts/sync-package.sh                            # plugins/ontoship/* -> .omp/
-python3 .omp/skills/kb-search/gitmark.py index       # собрать поисковый индекс KB
-python3 -m pytest tests/                             # канон — plugins/ontoship/.../gitmark.py
+omp plugin install --scope project ontoship@sot-omp-marketplace
+G=.omp/plugins/node_modules/ontoship/skills/kb-search/gitmark.py
+python3 "$G" index
+python3 "$G" lint
+python3 -m pytest tests/
 ```
 
-Ожидаемый результат:
+`tests/` проверяет тот же `gitmark`, что пришёл с плагином; канон инструмента
+живёт в [ontoship-omp](https://github.com/ntin60775/ontoship-omp).
 
-- `sync-package.sh` печатает `sync: plugins/ontoship -> .omp выполнено`;
-  в `.omp/` появляются `skills/`, `commands/`, `rules/`, `scripts/`
-  (с очищенным `__pycache__`).
-- `gitmark index` перестраивает `.gitmark/` (индекс производный, не коммитится).
-- `pytest tests/` зелёный; тесты гоняются против канона
-  [plugins/ontoship/skills/kb-search/gitmark.py](../../plugins/ontoship/skills/kb-search/gitmark.py),
-  а не против копии.
-
-Проверить, что копия не разошлась с источником:
-
-```bash
-./scripts/sync-package.sh --check    # ДРЕЙФ: <dir> → exit 1; иначе "sync: OK"
-```
-
-## Регулярное обслуживание
-
-После любой правки документов в `docs/` (и вообще при работе с KB):
-
-```bash
-python3 .omp/skills/kb-search/gitmark.py index    # пересобрать индекс после правки docs
-python3 .omp/skills/kb-search/gitmark.py lint     # проверить онтологию (I1–I7)
-python3 .omp/skills/kb-search/gitmark.py map -o docs-map.html   # обновить граф (когда менялась структура)
-```
-
-Индекс и `*-map.html` — производные артефакты: только перегенерируются, никогда
-не коммитятся и не правятся руками (принцип AGENTS.md §Principle).
-
-## См. также
-
-- [release-ontoship.md](release-ontoship.md) — цикл релиза плагина (тот же
-  `sync-package.sh`, но с gate перед тегом).
+Индекс и граф — производные: `.gitmark/` и `*-map.html` не коммитятся, они
+пересобираются из markdown.

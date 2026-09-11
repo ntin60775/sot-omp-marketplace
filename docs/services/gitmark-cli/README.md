@@ -5,15 +5,15 @@ service: gitmark-cli
 status: active
 updated: 2026-08-30
 links:
-  documents: [../../../plugins/ontoship/skills/kb-search/gitmark.py, ../../../plugins/ontoship/skills/kb-search/SKILL.md, ../../../tests/test_gitmark.py, ../../../plugins/ontoship/scripts/deploy-check.sh]
-  relates_to: [../../reference/gitmark-ontology.md, ../../reference/commands.md]
+  documents: [../../../tests/test_gitmark.py]
+  relates_to: [../../reference/gitmark-ontology.md]
 ---
 
 # GitMark CLI
 
 Подсистема базы знаний: [GitMark-онтология](../../reference/gitmark-ontology.md) живёт в
 обычном markdown, а поверх неё работает CLI-движок
-[gitmark.py](../../../plugins/ontoship/skills/kb-search/gitmark.py). Источник истины —
+gitmark.py. Источник истины —
 **md + README-индексы + git**; всё производное (поисковый индекс, HTML-обзор, граф)
 регенерируется из md. Движок — чистый Python stdlib, работает оффлайн; поиск — SQLite
 FTS5: `bm25()` по терминам ∪ trigram-токенайзер (подстроки, опечатки, кириллица).
@@ -22,7 +22,7 @@ FTS5: `bm25()` по терминам ∪ trigram-токенайзер (подс�
 
 - Канон движка: `plugins/ontoship/skills/kb-search/gitmark.py` — здесь правится код.
 - `.omp/skills/kb-search/gitmark.py` — генерируемая dogfood-копия корневой `.omp/`
-  (gitignore), синхронизируется [sync-package.sh](../../../scripts/sync-package.sh);
+  (gitignore), синхронизируется sync-package.sh;
   именно к ней обращаются скиллы и команды из рабочего проекта.
 - [tests/test_gitmark.py](../../../tests/test_gitmark.py) грузит модуль через `importlib`
   по **каноническому** пути плагина, а не по копии.
@@ -79,7 +79,7 @@ trigram опционален (exit 2, «fuzzy/substring-поиск будет о
 
 `inventory` сканирует `.omp/commands/*.md` и `.omp/skills/*/SKILL.md` (frontmatter:
 `description`, `args`, `drives`) и перегенерирует сводные таблицы в
-[docs/reference/commands.md](../../reference/commands.md) между HTML-маркерами
+docs/reference/commands.md между HTML-маркерами
 `<!-- BEGIN inventory:commands -->` / `<!-- END inventory:commands -->` (аналогично
 `inventory:skills`) — всё вне маркеров не трогается, операция идемпотентна.
 `inventory --check` ничего не пишет и докладывает рассинхрон — ту же логику
@@ -94,7 +94,7 @@ trigram опционален (exit 2, «fuzzy/substring-поиск будет о
 
 ## Смоук развёртывания
 
-[deploy-check.sh](../../../plugins/ontoship/scripts/deploy-check.sh) проверяет, что пакет
+deploy-check.sh проверяет, что пакет
 на месте: ключевые файлы (`.omp/skills/kb-search/gitmark.py`, команды, правила), FTS5
 обязателен / trigram опционален, `index` + контрольный `search "OntoShip"` возвращают
 непустой результат, `docs/` забутстраплен, `.gitmark/` в `.gitignore`. Коды возврата:

@@ -1,37 +1,57 @@
 # sot-omp-marketplace
 
 Личный маркетплейс omp-плагинов (формат каталога — `.omp-plugin/marketplace.json`).
-Репозиторий — одновременно **дом разработки** плагинов (`plugins/<name>/`) и их
-**каталог-релиз**.
+Репозиторий — **только каталог и KB**. Плагины здесь не разрабатываются: каждый
+живёт в своём репозитории и подключается из каталога по тегу.
+
+Почему так — [ADR «доставка плагинами»](docs/decisions/plugin-delivery.md).
 
 ## Плагины
 
-| Плагин | Что это | Статус |
+| Плагин | Что это | Репозиторий |
 |---|---|---|
-| [ontoship](plugins/ontoship/) | GitMark KB (md+git, FTS5-поиск, онтология-линтер) + dev-flow: план → тикеты → ship | переезжает из `ntin60775/ontoship-omp` (работа по `docs/plans/marketplace-delivery/`) |
+| `1c` | контур 1С-разработки: правила BSL, гейты Unica, навыки развёртывания | [ntin60775/1c-omp](https://github.com/ntin60775/1c-omp) |
+| `ontoship` | GitMark KB (md+git, FTS5-поиск, онтология-линтер) + dev-flow | [ntin60775/ontoship-omp](https://github.com/ntin60775/ontoship-omp) |
 
-## Установка (после первой публикации)
+Плагин `1c` **требует** `unica@unica` из маркетплейса
+`IngvarConsulting/unica-marketplace`: без него нет ни `unica.*`, ни v8-runner.
+Механизма зависимостей в схеме каталога нет — связку обеспечивает навык
+развёртывания контура.
+
+## Установка
 
 ```bash
-# раз на машину
+# раз на машине
+omp plugin marketplace add IngvarConsulting/unica-marketplace
 omp plugin marketplace add ntin60775/sot-omp-marketplace
-# user-scope = доступен во всех проектах
-omp plugin install ontoship@sot-omp-marketplace
-# или project-scope (пин по версии, тенит user-scope)
-cd <project> && omp plugin install --scope project ontoship@sot-omp-marketplace
+
+# в проекте: 1С-контур (в не-1С проекте нужен только ontoship)
+cd <project>
+omp plugin install --scope project unica@unica
+omp plugin install --scope project 1c@sot-omp-marketplace
+omp plugin install --scope project ontoship@sot-omp-marketplace
+# перезапустить сессию: MCP и хуки поднимаются только при старте
 ```
 
-Обновление: `omp plugin marketplace update sot-omp-marketplace && omp plugin upgrade ontoship@sot-omp-marketplace`.
+Установка **в проект**, а не в машину: у контура есть проектный контекст (база,
+учётка, состав расширений) и своя версия. Цена решения — ворктри не наследуют
+`.omp/plugins/`, поэтому в проекте нужен шаг установки в `tasks/init-worktree.sh`.
+
+Обновление: `omp plugin marketplace update sot-omp-marketplace && omp plugin upgrade <plugin>@sot-omp-marketplace`.
 
 ## Релиз плагина
 
-1. Изменения в `plugins/<name>/` (разработка — по dev-flow OntoShip, dogfood через
-   `scripts/sync-package.sh`).
-2. Bump `version` в `.omp-plugin/marketplace.json` (авторитетна только она —
-   проверено на omp v18.0.6) и в `plugins/<name>/package.json`.
-3. Тег `<name>-vX.Y.Z`, push.
-4. Потребители: `marketplace update` + `upgrade`.
+1. Изменения — в репозитории плагина, там же прогоняются его проверки.
+2. Тег `vX.Y.Z` в репозитории плагина, push.
+3. В каталоге: bump `version` и `ref` в записи плагина.
+4. Потребители: `omp plugin marketplace update` + `omp plugin upgrade`.
 
 ## Структура
 
-См. [AGENTS.md](AGENTS.md). KB разработки — [docs/](docs/README.md).
+```
+.omp-plugin/marketplace.json   каталог: записи плагинов, закреплённые ref, версии
+docs/                          KB: решения, планы, справочники, сервисы
+tests/                         тесты gitmark
+```
+
+См. также [AGENTS.md](AGENTS.md) и [KB](docs/README.md).

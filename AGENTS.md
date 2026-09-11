@@ -37,8 +37,8 @@ Supersedes the 2026-08-30 decision. Full record:
 
 ## Start here
 
-- **The plan** → [docs/plans/marketplace-delivery/](docs/plans/marketplace-delivery/README.md)
-- **OntoShip package source** → [plugins/ontoship/](plugins/ontoship/)
+- **Topology** → [docs/decisions/plugin-delivery.md](docs/decisions/plugin-delivery.md)
+- **OntoShip package source** → [ntin60775/ontoship-omp](https://github.com/ntin60775/ontoship-omp)
 - **The catalog** → [.omp-plugin/marketplace.json](.omp-plugin/marketplace.json)
 
 ## Principle
@@ -48,19 +48,24 @@ Same as OntoShip's: markdown + git is the source of truth; everything derived
 
 ## First clone (bootstrap)
 
-Корневой `.omp/` не в git (сгенерируемая копия) — после свежего клона соберите
-его, иначе dogfood-навыки/команды и `gitmark` недоступны:
+Корневой `.omp/` не в git: он собирается **установкой плагина**, а не скриптом.
+После свежего клона:
 
 ```bash
-./scripts/sync-package.sh          # plugins/ontoship/{skills,commands,rules,scripts} -> .omp/
-python3 .omp/skills/kb-search/gitmark.py index
-python3 -m pytest tests/           # канон — plugins/ontoship/.../gitmark.py
+omp plugin install --scope project ontoship@sot-omp-marketplace
+G=.omp/plugins/node_modules/ontoship/skills/kb-search/gitmark.py
+python3 "$G" index
+python3 -m pytest tests/
 ```
+
+`gitmark` приходит из плагина. Собственной копии в репозитории нет намеренно:
+вторая копия одного инструмента — ровно тот дрейф, от которого мы уходим.
 
 ## Maintain
 
 ```bash
-python3 .omp/skills/kb-search/gitmark.py index    # rebuild the index after editing docs
-python3 .omp/skills/kb-search/gitmark.py lint     # check the ontology
-python3 .omp/skills/kb-search/gitmark.py map -o docs-map.html
+G=.omp/plugins/node_modules/ontoship/skills/kb-search/gitmark.py
+python3 "$G" index    # rebuild the index after editing docs
+python3 "$G" lint     # check the ontology
+python3 "$G" map -o docs-map.html
 ```

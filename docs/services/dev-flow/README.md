@@ -5,7 +5,6 @@ service: dev-flow
 status: active
 updated: 2026-08-30
 links:
-  documents: [../../../plugins/ontoship/skills/dev-flow/SKILL.md, ../../../plugins/ontoship/commands/ship.md, ../../../plugins/ontoship/rules/ship-gate.md, ../../../plugins/ontoship/commands/to-tickets.md]
   relates_to: [../../plans/marketplace-delivery/README.md, ../../reference/gitmark-ontology.md]
 ---
 
@@ -14,9 +13,9 @@ links:
 Сервис поставки: спецификацией служит сама база знаний (GitMark-онтология, см.
 [gitmark-ontology](../../reference/gitmark-ontology.md)), а работа идёт по циклу
 **план → тикеты → ship**. Скилл
-[dev-flow/SKILL.md](../../../plugins/ontoship/skills/dev-flow/SKILL.md) описывает цикл,
-команда [/ship](../../../plugins/ontoship/commands/ship.md) запускает его вручную,
-правило [ship-gate](../../../plugins/ontoship/rules/ship-gate.md) закрывает объезд.
+dev-flow/SKILL.md описывает цикл,
+команда /ship запускает его вручную,
+правило ship-gate закрывает объезд.
 Ориентир цикла — тикет до продакшена за ~40 минут–2 часа; пример активного плана —
 [marketplace-delivery](../../plans/marketplace-delivery/README.md).
 
@@ -26,7 +25,7 @@ links:
   Поля контракта: `Goal`, `Done`, `Scope`, `Constraints` (stop-points), `Context`,
   `Tickets`.
 - **Папка** `docs/plans/<slug>/` — создаёт только `mp-to-tickets`
-  ([/to-tickets](../../../plugins/ontoship/commands/to-tickets.md)): он делает
+  (/to-tickets): он делает
   `git mv` файла в `README.md` (история сохраняется, ссылки перепишиваются на
   дополнительную глубину) и добавляет тикеты `NN-<ticket>.md` (`node_type: ticket`) —
   tracer-bullet вертикальные срезы, каждый со своими `Blocked by`.
@@ -44,7 +43,7 @@ handoff/review в `.scratch/` — это предписывает ship-gate.
 ## /ship: только вручную, один тикет за прогон
 
 Три жёстких правила из
-[ship-gate.md](../../../plugins/ontoship/rules/ship-gate.md):
+ship-gate.md:
 
 1. Изменения кода в репозитории идут **только** через dev-flow (`/ship`).
 2. `/ship` запускает **только оператор руками**, агент никогда не запускает его сам.

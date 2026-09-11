@@ -39,7 +39,7 @@ OntoShip (GitMark KB + dev-flow) переезжает в этот репозит
 4. **Репозиторий dogfood'ит собственный пакет.** Корневая `.omp/` —
    генерируемая копия `plugins/ontoship/{skills,commands,rules,scripts}`
    (gitignore). Источник истины — дерево плагина; синхронизация —
-   [`scripts/sync-package.sh`](../../scripts/sync-package.sh) (есть режим
+   `scripts/sync-package.sh` (есть режим
    `--check` на дрейф).
 
 ## Следствия

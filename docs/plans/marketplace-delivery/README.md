@@ -6,7 +6,7 @@ status: archived
 updated: 2026-09-11
 links:
   depends_on: [../README.md, ../../README.md]
-  documents: [../../../plugins/ontoship/commands, ../../../plugins/ontoship/rules]
+
 ---
 
 > **Не исполнять.** Подход этого плана (каталог и дом разработки в одном

@@ -23,7 +23,7 @@ point: [../AGENTS.md](../AGENTS.md).
   [онтология GitMark](reference/gitmark-ontology.md),
   [контракт каталога](reference/marketplace-catalog.md),
   [пакет ontoship](reference/ontoship-package.md),
-  [реестр команд](reference/commands.md)
+  реестр команд
 
 ## Ops
 

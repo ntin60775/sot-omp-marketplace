@@ -5,13 +5,12 @@ service: _platform
 status: active
 updated: 2026-08-30
 links:
-  documents: [../../plugins/ontoship/skills/kb-search/gitmark.py, ../../plugins/ontoship/skills/kb-curate/SKILL.md]
-  relates_to: [commands.md, ../services/gitmark-cli/README.md]
+  relates_to: [../services/gitmark-cli/README.md]
 ---
 
 # Онтология GitMark
 
-Словарь и инварианты базы знаний. Движок — [`gitmark.py`](../../plugins/ontoship/skills/kb-search/gitmark.py)
+Словарь и инварианты базы знаний. Движок — `gitmark.py`
 (подкоманды `lint`, `index`, `inventory`), операционный чек-лист для человека/агента —
 навык `kb-curate`. Принцип: **md + git — источник истины, поверх — онтология**
 (типы объектов / свойства / типизированные связи). Всё производное (`.gitmark/`,
@@ -66,7 +65,7 @@ links:
 ## Инварианты I1–I7 (что проверяет `gitmark lint`)
 
 Код проверки — `cmd_lint` в
-[`gitmark.py`](../../plugins/ontoship/skills/kb-search/gitmark.py) (строки ~344–481)
+`gitmark.py` (строки ~344–481)
 и `inventory_issues` (~550–582).
 
 | # | Уровень | Инвариант |
@@ -77,7 +76,7 @@ links:
 | I4 | ERR | Битых `.md`-ссылок в теле нет: каждая markdown-ссылка, оканчивающаяся на `.md` (не `http`/`mailto`), обязана резолвиться в существующий документ. Ссылки внутри fenced/inline-кода вырезаются (`strip_code`) и не проверяются. |
 | I5 | WARN | На каждую папку под `docs/` — свой `README.md` (индекс). |
 | I6 | WARN | Цель `supersedes:` помечена `deprecated` или `archived` — иначе вытеснение не оформлено. |
-| I7 | ERR | Реестр [`commands.md`](commands.md) синхронен дереву `.omp/`: таблицы между маркерами `<!-- BEGIN inventory:commands|skills -->` совпадают с генерацией, у каждой команды есть `args:` и `drives:` во frontmatter, секции `## /cmd` и файлы команд образуют одну пару. Лечится `gitmark inventory`. |
+| I7 | ERR | Реестр `commands.md` синхронен дереву `.omp/`: таблицы между маркерами `<!-- BEGIN inventory:commands|skills -->` совпадают с генерацией, у каждой команды есть `args:` и `drives:` во frontmatter, секции `## /cmd` и файлы команд образуют одну пару. Лечится `gitmark inventory`. |
 
 ## Мини-парсер frontmatter (почему нельзя вложенный YAML)
 
@@ -111,9 +110,9 @@ links:
 | `docs/**.md`, README-индексы, frontmatter | источник истины (git) |
 | `.gitmark/index.db` (FTS5 + trigram, таблицы `files`/`links`) | derived — `gitmark index`, в gitignore |
 | `*-map.html` (обзор/граф) | derived — `gitmark map`, в gitignore |
-| [`commands.md`](commands.md) между маркерами `inventory:*` | derived-секции внутри source-файла — руками не правятся, чинятся `gitmark inventory` |
+| `commands.md` между маркерами `inventory:*` | derived-секции внутри source-файла — руками не правятся, чинятся `gitmark inventory` |
 
 ## См. также
 
-- [Реестр команд и навыков](commands.md) — объект инварианта I7
+- Реестр команд и навыков — объект инварианта I7
 - [GitMark CLI (сервис)](../services/gitmark-cli/README.md) — движок онтологии
