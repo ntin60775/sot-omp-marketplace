@@ -9,8 +9,8 @@
     {
       "name": "1c",
       "source": {
-        "source": "github",
-        "repo": "ntin60775/1c-omp",
+        "source": "url",
+        "url": "git@github.com:ntin60775/1c-omp.git",
         "ref": "v0.1.0"
       },
       "description": "Контур 1С-разработки: правила BSL, гейты Unica, навыки развёртывания контура. Ставится на уровень проекта и требует unica@unica.",
