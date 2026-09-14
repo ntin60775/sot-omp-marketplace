@@ -1,26 +1,30 @@
 ---
 node_type: reference
-title: Анатомия плагина ontoship и dogfood-механизм
+title: Анатомия пакета ontoship
 service: _platform
 status: active
-updated: 2026-08-30
+updated: 2026-09-14
 links:
   relates_to: [marketplace-catalog.md, ../../AGENTS.md]
 ---
 
-# Анатомия плагина `ontoship`
+# Анатомия пакета `ontoship`
 
-Пакет `plugins/ontoship/` — канонное дерево плагина (единственный источник истины):
-GitMark KB (md+git, FTS5-поиск, онтология-линтер) + dev-flow «план → тикеты → ship».
-Версия манифеста `package.json` — `0.1.0`
-(метаданные; для канала обновлений авторитетна версия каталога, см.
-[контракт каталога](marketplace-catalog.md)).
+Пакет `ontoship` — GitMark KB (md+git, FTS5-поиск, онтология-линтер) +
+dev-flow «план → тикеты → ship». Разрабатывается в собственном репозитории
+`ntin60775/ontoship-omp`; в этот репозиторий он доставляется каталогом по
+тегу: запись `git-subdir` с `path: ".omp"` и `ref: "v0.3.0"`
+([контракт каталога](marketplace-catalog.md)). После установки пакет лежит в
+`.omp/plugins/node_modules/ontoship/` (gitignore).
 
-## Дерево
+Для `omp plugin upgrade` авторитетна **версия записи каталога**
+`marketplace.json`; `package.json` пакета живёт в `ontoship-omp` и на канал
+обновлений не влияет.
+
+## Состав доставляемого пакета
 
 ```
-plugins/ontoship/
-  package.json                 метаданные пакета (name, version, description)
+.omp/plugins/node_modules/ontoship/
   skills/                      12 навыков
     kb-search/                 движок: gitmark.py (index/search/map/serve/stat/lint/inventory/version)
     kb-curate/                 чек-лист онтологии при правке KB
@@ -34,51 +38,45 @@ plugins/ontoship/
     mp-code-review/            двухосевой ревью (Standards/Spec)
     mp-improve-codebase-architecture/  скан deepening-возможностей → HTML-отчёт
     domain-modeling/           CONTEXT.md + docs/decisions/
-  commands/                    12 команд: architecture, code-review, doc, grill,
-                               grilling, handoff, kb, kb-map, onto-doc, prototype,
-                               ship, to-tickets — реестр с аргументами: commands.md
+  commands/                    13 команд: architecture, code-review, doc, grill,
+                               grilling, handoff, init, kb, kb-map, onto-doc,
+                               prototype, ship, to-tickets — реестр с аргументами:
+                               commands.md
   rules/                       4 правила:
     kb-first.md                (alwaysApply) искать в KB перед ответом о проекте
     kb-source-of-truth.md      (alwaysApply) md+git — истина; derived не коммитить
     ship-gate.md               (alwaysApply) код только через /ship, триггер — человек
-    ship-1c.md                 (alwaysApply: false, opt-in) /ship с stop-before-commit в 1C-проектах
+    acceptance-rounds.md       (alwaysApply) раунды приёмки и багфикс после основного цикла
   scripts/deploy-check.sh      проверка развёртывания пакета в проекте
 ```
 
 Полные описания команд/навыков — генерируемый реестр (руками не
 правится, синхронизация `gitmark inventory`).
 
-## Dogfood-механизм
-
-Этот репозиторий работает по собственным правилам, поэтому корневая `.omp/` —
-**генерируемая копия** дерева плагина (в `.gitignore`):
-
-```bash
-./scripts/sync-package.sh           # plugins/ontoship/{skills,commands,rules,scripts} -> .omp/
-./scripts/sync-package.sh --check   # доложить о дрейфе (exit 1), ничего не меняя
-```
-
-`scripts/sync-package.sh` делает `rm -rf` + `cp -r`
-четырёх каталогов и вычищает `__pycache__`. Следствия:
-
-- руками в `.omp/` не правят — правка умрёт при ближайшей синхронизации; источник —
-  `plugins/ontoship/`;
-- после изменения дерева плагина — `sync-package.sh`, иначе `gitmark lint` (I7) и
-  реестр разъедутся с реальными командами;
-- при свежем клоне репо `.omp/` нет вообще — бутстрап описан в
-  [AGENTS.md](../../AGENTS.md) (sync → `gitmark index` → pytest);
-- в плане поставки — будущие изменения: копировать в `.omp/` также `package.json`
-  (иначе dogfood-копия не видит версию) и перевести пути CLI на `skill://`
-  (состояние плана, не текущий факт).
-
 ## Проверка развёртывания
 
-`plugins/ontoship/scripts/deploy-check.sh`
-в проекте-потребителе: `exit 0` — пакет на месте и работает; `1` — критические
-проблемы (нет ключевых файлов `.omp/`, SQLite без FTS5, сломан индекс); `2` —
-предупреждения (нет trigram-токенайзера → ограничен fuzzy-поиск; `docs/` не
-забутстраплен; `.gitmark/` не в `.gitignore`). Проверяет наличие файлов, FTS5/trigram,
-пересборку индекса и смоук-поиск.
+`deploy-check.sh` из доставленного пакета
+(`.omp/plugins/node_modules/ontoship/scripts/deploy-check.sh`)
+в проекте-потребителе. Корень пакета резолвится от расположения самого скрипта
+(`pkg="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"`), поэтому скрипт
+работает и в плоской установке (`<проект>/.omp/scripts/`), и в плагинной
+(`<проект>/.omp/plugins/node_modules/<плагин>/scripts/`) — раскладка не хардкодится.
+
+Проверки:
+
+1. Ключевые файлы — от корня пакета: `skills/kb-search/gitmark.py`,
+   `commands/kb.md`, `commands/onto-doc.md`, `rules/kb-first.md`, плюс `AGENTS.md`
+   от корня проекта.
+2. Страж мёртвого пути: FAIL, если payload ссылается на плоский
+   `.omp/skills/kb-search/gitmark.py` (payload обязан использовать
+   `skill://kb-search/gitmark.py`).
+3. SQLite: FTS5 обязателен (exit 1 при отсутствии), trigram опционален (exit 2).
+4. Движок берётся из пакета: `index` + смоук `search "OntoShip" -k 1 --json`
+   (ошибка движка → FAIL, пустой результат → WARN).
+5. `docs/` существует (WARN) и `.gitignore` содержит `.gitmark/`, `*-map.html`,
+   `.scratch/` (WARN за каждую отсутствующую строку).
+
+Коды возврата: `0` — ОК; `1` — критические проблемы; `2` — предупреждения.
 
 ## Как потребители ставят плагин
 

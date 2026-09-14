@@ -37,14 +37,19 @@ omp plugin install --scope project ontoship@sot-omp-marketplace
 учётка, состав расширений) и своя версия. Цена решения — ворктри не наследуют
 `.omp/plugins/`, поэтому в проекте нужен шаг установки в `tasks/init-worktree.sh`.
 
-Обновление: `omp plugin marketplace update sot-omp-marketplace && omp plugin upgrade <plugin>@sot-omp-marketplace`.
+Обновление: `omp plugin marketplace update sot-omp-marketplace && omp plugin upgrade <plugin>@sot-omp-marketplace --scope=project`.
+Без `--scope` upgrade ставит плагин в user-scope — машинно, во все проекты.
 
 ## Релиз плагина
 
 1. Изменения — в репозитории плагина, там же прогоняются его проверки.
-2. Тег `vX.Y.Z` в репозитории плагина, push.
-3. В каталоге: bump `version` и `ref` в записи плагина.
-4. Потребители: `omp plugin marketplace update` + `omp plugin upgrade`.
+2. Bump `version` в `package.json` плагина + коммит (метаданные; канал обновлений
+   читает версию каталога, не манифеста).
+3. Тег `vX.Y.Z` в репозитории плагина, push.
+4. В каталоге: bump `version` и `ref` в записи плагина — это авторитетная версия
+   для `omp plugin upgrade`.
+5. Потребители: `omp plugin marketplace update` + `omp plugin upgrade <plugin>@sot-omp-marketplace --scope=project`
+   (без `--scope` — user-scope, машинно).
 
 ## Структура
 

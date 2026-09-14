@@ -99,8 +99,14 @@ docs/reference/commands.md между HTML-маркерами
 
 ## Смоук развёртывания
 
-deploy-check.sh проверяет, что пакет
-на месте: ключевые файлы (`.omp/skills/kb-search/gitmark.py`, команды, правила), FTS5
-обязателен / trigram опционален, `index` + контрольный `search "OntoShip"` возвращают
-непустой результат, `docs/` забутстраплен, `.gitmark/` в `.gitignore`. Коды возврата:
-0 — ОК, 1 — критично, 2 — предупреждения.
+deploy-check.sh проверяет, что пакет на месте. Корень пакета резолвится от
+расположения самого скрипта (`pkg="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"`),
+поэтому скрипт работает и в плоской (`<проект>/.omp/scripts/`), и в плагинной
+(`<проект>/.omp/plugins/node_modules/<плагин>/scripts/`) установке. Проверки:
+ключевые файлы от корня пакета (`skills/kb-search/gitmark.py`, `commands/kb.md`,
+`commands/onto-doc.md`, `rules/kb-first.md`) плюс `AGENTS.md` от корня проекта;
+страж мёртвого пути (FAIL, если payload ссылается на плоский
+`.omp/skills/kb-search/gitmark.py`); FTS5 обязателен / trigram опционален;
+`index` + контрольный `search "OntoShip" -k 1 --json` (ошибка движка → FAIL,
+пустой результат → WARN); `docs/` забутстраплен; `.gitmark/`, `*-map.html`,
+`.scratch/` в `.gitignore`. Коды возврата: 0 — ОК, 1 — критично, 2 — предупреждения.
