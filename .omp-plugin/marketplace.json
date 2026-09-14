@@ -3,7 +3,7 @@
   "owner": { "name": "sothale" },
   "metadata": {
     "description": "Личный маркетплейс omp-плагинов: контур 1С-разработки (1c) и KB/dev-flow (ontoship)",
-    "version": "0.2.0"
+    "version": "0.3.0"
   },
   "plugins": [
     {
