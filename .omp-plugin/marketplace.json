@@ -3,7 +3,7 @@
   "owner": { "name": "sothale" },
   "metadata": {
     "description": "Личный маркетплейс omp-плагинов: контур 1С-разработки (1c) и KB/dev-flow (ontoship)",
-    "version": "0.3.0"
+    "version": "0.3.1"
   },
   "plugins": [
     {
@@ -24,10 +24,10 @@
       "source": {
         "source": "url",
         "url": "git@github.com:ntin60775/1c-omp.git",
-        "ref": "v0.1.1"
+        "ref": "v0.1.2"
       },
       "description": "Контур 1С-разработки: правила BSL, гейты Unica, навыки развёртывания контура. Ставится на уровень проекта и требует unica@unica.",
-      "version": "0.1.1",
+      "version": "0.1.2",
       "category": "development",
       "keywords": ["1c", "bsl", "unica", "v8-runner", "vanessa", "yaxunit"]
     }
