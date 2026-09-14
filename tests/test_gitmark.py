@@ -9,9 +9,16 @@ from pathlib import Path
 
 import pytest
 
-# канон плагина — plugins/ontoship; .omp/ — генерируемая dogfood-копия
+# движок доставляется установленным плагином ontoship
 _GITMARK = (Path(__file__).resolve().parent.parent
-            / "plugins" / "ontoship" / "skills" / "kb-search" / "gitmark.py")
+            / ".omp" / "plugins" / "node_modules" / "ontoship"
+            / "skills" / "kb-search" / "gitmark.py")
+if not _GITMARK.exists():
+    pytest.skip(
+        "ontoship plugin not installed — run: "
+        "omp plugin install --scope project ontoship@sot-omp-marketplace",
+        allow_module_level=True,
+    )
 _spec = importlib.util.spec_from_file_location("gitmark", _GITMARK)
 gm = importlib.util.module_from_spec(_spec)
 sys.modules["gitmark"] = gm
