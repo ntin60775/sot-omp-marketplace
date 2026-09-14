@@ -49,14 +49,23 @@ omp plugin install --scope project ontoship@sot-omp-marketplace
 4. В каталоге: bump `version` и `ref` в записи плагина — это авторитетная версия
    для `omp plugin upgrade`.
 5. Потребители: `omp plugin marketplace update` + `omp plugin upgrade <plugin>@sot-omp-marketplace --scope=project`
-   (без `--scope` — user-scope, машинно).
+   (без `--scope` — user-scope, машинно). Все потребители машины разом —
+   `python3 scripts/consumers.py check` до и `upgrade` + `verify` после
+   ([реестр потребителей](docs/reference/consumer-registry.md)).
 
 ## Структура
 
 ```
-.omp-plugin/marketplace.json   каталог: записи плагинов, закреплённые ref, версии
-docs/                          KB: решения, планы, справочники, сервисы
-tests/                         тесты gitmark
+.omp-plugin/marketplace.json           каталог: записи плагинов, закреплённые ref, версии
+schemas/consumer-registry.schema.json  схема реестра потребителей (коммитится)
+.consumers.json                        реестр потребителей этой машины (в .gitignore)
+scripts/consumers.py                   инструмент: discover/scan/check/upgrade/verify/migrate
+docs/                                  KB: решения, планы, справочники, сервисы
+tests/                                 тесты инструмента
 ```
+
+Потребители каталога живут в локальном реестре `.consumers.json`: он знает, какие
+плагины должны стоять в каждом проекте машины, что стоит фактически и где рядом
+остались плоские копии пакета — [формат и семантика](docs/reference/consumer-registry.md).
 
 См. также [AGENTS.md](AGENTS.md) и [KB](docs/README.md).

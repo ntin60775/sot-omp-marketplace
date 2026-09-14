@@ -22,6 +22,7 @@ point: [../AGENTS.md](../AGENTS.md).
 - [Reference](reference/README.md) — справочники:
   [онтология GitMark](reference/gitmark-ontology.md),
   [контракт каталога](reference/marketplace-catalog.md),
+  [реестр потребителей](reference/consumer-registry.md),
   [пакет ontoship](reference/ontoship-package.md),
   реестр команд
 

@@ -18,4 +18,8 @@ __pycache__/
 # Установленный плагин — результат `omp plugin install --scope project ontoship@sot-omp-marketplace`
 .omp/
 
+# Реестр потребителей этой машины: абсолютные пути и состав проектов не коммитятся.
+# Схема реестра — schemas/consumer-registry.schema.json, она коммитится.
+.consumers.json
+
 .DS_Store

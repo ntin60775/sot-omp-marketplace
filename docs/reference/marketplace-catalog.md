@@ -6,7 +6,7 @@ status: active
 updated: 2026-09-14
 links:
   documents: [../../.omp-plugin/marketplace.json, ../../README.md]
-  relates_to: [../plans/marketplace-delivery/README.md, ontoship-package.md]
+  relates_to: [../plans/consumer-delivery.md, consumer-registry.md, ontoship-package.md]
 ---
 
 # Контракт каталога маркетплейса
@@ -42,10 +42,14 @@ links:
 - `metadata.version` — версия каталога;
 - `plugins[]` — записи плагинов (name, source, версия/ref).
 
-**Текущее состояние: version `0.3.0` (версия каталога), две записи** — `ontoship`
-v0.4.0 (git-subdir, `path: ".omp"`, `ref: "v0.4.0"`) и `1c` v0.1.1 (url,
-`ref: "v0.1.1"`). План [marketplace-delivery](../plans/marketplace-delivery/README.md)
-архивирован и не исполняется.
+**Текущее состояние: version `0.3.1` (версия каталога), две записи** — `ontoship`
+v0.4.0 (git-subdir, `path: ".omp"`, `ref: "v0.4.0"`) и `1c` v0.1.2 (url,
+`ref: "v0.1.2"`). Кого эти записи обслуживают и что у них стоит фактически — реестр
+потребителей машины ([consumer-registry.md](consumer-registry.md)); работы по
+приведению машины к плагинной поставке — план
+[consumer-delivery](../plans/consumer-delivery.md). План
+[marketplace-delivery](../plans/marketplace-delivery/README.md) архивирован и не
+исполняется.
 
 ## Авторитет версии
 

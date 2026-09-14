@@ -1,15 +1,20 @@
 # sot-omp-marketplace — entry point
 
 Personal **omp marketplace**: a catalog repo of plugins in omp format
-(`.omp-plugin/marketplace.json`). This repo is the **development home** of the
-plugins it publishes — first and flagship: **OntoShip** (GitMark KB + dev-flow),
-which is being migrated here from `vakovalskii/ontoship-omp` → `ntin60775/ontoship-omp`.
+(`.omp-plugin/marketplace.json`). This repo is the **catalog and its KB** — the
+plugins it publishes live in their own repositories (first and flagship:
+**OntoShip** — GitMark KB + dev-flow — in
+[ntin60775/ontoship-omp](https://github.com/ntin60775/ontoship-omp)).
 
 ## Where things live
 
 ```
-.omp-plugin/marketplace.json   the catalog (plugin entries, pinned refs, versions)
-docs/                          this repo's KB (GitMark: plans, decisions, ops)
+.omp-plugin/marketplace.json      the catalog (plugin entries, pinned refs, versions)
+schemas/consumer-registry.schema.json   schema of the local consumer registry
+.consumers.json                   the registry itself — gitignored, one per machine
+scripts/consumers.py              consumer tool: discover/scan/check/upgrade/verify/migrate
+docs/                             this repo's KB (GitMark: plans, decisions, ops)
+tests/                            tests of the consumer tool
 ```
 
 Plugins are **not** developed here. Each lives in its own repository and is
@@ -32,8 +37,13 @@ Supersedes the 2026-08-30 decision. Full record:
   HTTPS, which cannot authenticate against a private repo.
 - Plugins install **per project** (`--scope project`). Worktrees do not inherit
   `.omp/plugins/`, so a project's `tasks/init-worktree.sh` must install them.
-- The marketplace repo itself no longer dogfoods a package: `plugins/` and
-  `scripts/sync-package.sh` are leftovers of the old scheme.
+- The marketplace repo dogfoods its own plugin: `.omp/` here is an install
+  (`omp plugin install --scope project ontoship@sot-omp-marketplace`), not a
+  package source. The old `plugins/` and `scripts/sync-package.sh` were removed
+  in `8b0a1c1`.
+- **Consumers are tracked locally**: `.consumers.json` (gitignored) lists every
+  project on this machine that consumes the catalog, with observed versions and
+  flat copies — [docs/reference/consumer-registry.md](docs/reference/consumer-registry.md).
 
 ## Start here
 

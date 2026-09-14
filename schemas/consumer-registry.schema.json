@@ -1,0 +1,164 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ntin60775/sot-omp-marketplace/schemas/consumer-registry.schema.json",
+  "title": "Реестр потребителей каталога sot-omp-marketplace",
+  "description": "Машинно-локальный список проектов-потребителей плагинов этого каталога и их наблюдаемое состояние. Файл данных — .consumers.json в корне клона каталога, он в .gitignore (абсолютные пути и состав машины не коммитятся). Схема — этот файл, она коммитится. Желаемая версия плагина в реестре НЕ хранится: авторитет — запись каталога .omp-plugin/marketplace.json.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "updated", "catalog", "consumers"],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Путь к этой схеме — редакторы дают автодополнение и проверку по нему."
+    },
+    "schemaVersion": {
+      "const": 1,
+      "description": "Версия формата реестра. Меняется только при несовместимой правке схемы; инструмент отказывается читать неизвестную версию."
+    },
+    "machine": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Имя машины (hostname) — реестр описывает одну машину, и это видно в файле."
+    },
+    "updated": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Когда реестр последний раз писал инструмент (ISO-8601 UTC)."
+    },
+    "catalog": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "const": "sot-omp-marketplace",
+          "description": "Имя каталога — то же, что в селекторе <plugin>@<marketplace>."
+        },
+        "remote": {
+          "type": "string",
+          "description": "owner/repo каталога — для `omp plugin marketplace update`."
+        }
+      }
+    },
+    "discoverRoots": {
+      "type": "array",
+      "description": "Каталоги, в которых инструмент ищет проекты с .omp/ (обнаружение неучтённых потребителей).",
+      "items": { "type": "string", "pattern": "^/" }
+    },
+    "exclude": {
+      "type": "array",
+      "description": "Пути, которые не являются потребителями и не должны попадать в отчёт об неучтённых: репозитории-источники плагинов, машинный слой.",
+      "items": { "$ref": "#/$defs/exclusion" }
+    },
+    "consumers": {
+      "type": "array",
+      "description": "Потребители. `name` и `path` обязаны быть уникальны в массиве — это проверяет инструмент, JSON Schema этого не выражает.",
+      "items": { "$ref": "#/$defs/consumer" }
+    }
+  },
+  "$defs": {
+    "exclusion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path"],
+      "properties": {
+        "path": { "type": "string", "pattern": "^/" },
+        "reason": { "type": "string", "description": "Почему этот путь не потребитель." }
+      }
+    },
+    "consumer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "path", "plugins"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]*$",
+          "description": "Короткий слаг — им адресуют потребителя в --only."
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^/",
+          "description": "Абсолютный путь к корню проекта (там, где .omp/). Абсолютный — потому и gitignore."
+        },
+        "plugins": {
+          "type": "array",
+          "description": "Ожидаемый состав плагинов проекта. Отсутствие записи в этом массиве = «здесь плагин не нужен»; наличие записи с installed: null = «нужен, но не поставлен» (дрейф missing).",
+          "items": { "$ref": "#/$defs/plugin" }
+        },
+        "legacy": {
+          "$ref": "#/$defs/legacy"
+        },
+        "worktreeInit": {
+          "$ref": "#/$defs/worktreeInit"
+        },
+        "notes": {
+          "type": "string",
+          "description": "Свободная заметка оператора: особенности проекта, известные отклонения."
+        },
+        "lastChecked": {
+          "type": ["string", "null"],
+          "format": "date-time",
+          "description": "Когда инструмент последний раз наблюдал состояние этого потребителя."
+        },
+        "lastUpgraded": {
+          "type": ["string", "null"],
+          "format": "date-time",
+          "description": "Когда инструмент последний раз обновлял плагины здесь."
+        }
+      }
+    },
+    "plugin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "scope"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*@[a-z0-9][a-z0-9-]*$",
+          "description": "<плагин>@<каталог>; каталог может быть чужим (unica@unica) — реестр ведёт и его, иначе связка контура 1С не видна целиком."
+        },
+        "scope": {
+          "enum": ["project", "user"],
+          "description": "Область установки. В проекте штатная — project: user-scope виден во всех проектах и путает версии."
+        },
+        "installed": {
+          "type": ["string", "null"],
+          "description": "Наблюдаемая версия (semver) из `omp plugin list --json` с cwd проекта; null — не установлен."
+        },
+        "pin": {
+          "type": ["string", "null"],
+          "description": "Проект сознательно держит эту версию: upgrade его пропускает, check показывает pinned без ошибки."
+        }
+      }
+    },
+    "legacy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["flat"],
+      "properties": {
+        "flat": {
+          "type": "array",
+          "description": "Плоские копии пакета в проекте, путями относительно корня проекта. Пустой массив — копий нет.",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "worktreeInit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["hook", "installsPlugins"],
+      "description": "Ворктри не наследуют .omp/plugins/ (ADR plugin-delivery §4), поэтому установка плагинов обязана быть шагом инициализации ворктри.",
+      "properties": {
+        "hook": {
+          "type": ["string", "null"],
+          "description": "Путь к скрипту инициализации ворктри относительно корня проекта; null — скрипта нет."
+        },
+        "installsPlugins": {
+          "type": "boolean",
+          "description": "Скрипт действительно ставит плагины (а не только напоминает о них)."
+        }
+      }
+    }
+  }
+}

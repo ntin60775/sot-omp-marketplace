@@ -41,6 +41,10 @@ links:
    omp plugin upgrade <plugin>@sot-omp-marketplace --scope=project
    ```
 
+   Все потребители машины разом — реестром: `python3 scripts/consumers.py check`
+   (что обновится и где стоит `pin`) → `upgrade` → `verify`. Реестр, виды дрейфа и
+   контракт инструмента — [реестр потребителей](../reference/consumer-registry.md).
+
    > **ВНИМАНИЕ: ловушка `--scope` по умолчанию.** `omp plugin install` и
    > `omp plugin upgrade` **без** `--scope` ставят плагин в **user-scope** — он
    > становится виден во всех проектах машины. Проекты, которые пинят плагин
