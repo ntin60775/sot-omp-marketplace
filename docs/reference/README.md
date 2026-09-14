@@ -3,7 +3,7 @@ node_type: index
 title: Reference — справочники разработки маркетплейса
 service: _platform
 status: active
-updated: 2026-08-30
+updated: 2026-09-14
 ---
 
 # Reference
@@ -12,7 +12,7 @@ updated: 2026-08-30
   репозиторий собственного omp-пакета не несёт (команды живут в репозиториях
   плагинов). Таблицы генерируются `gitmark inventory`
 - [gitmark-ontology.md](gitmark-ontology.md) — онтология GitMark: словари, инварианты
-  I1–I7, мини-парсер frontmatter
+  I1–I8, мини-парсер frontmatter
 - [marketplace-catalog.md](marketplace-catalog.md) — контракт каталога
   `.omp-plugin/marketplace.json`: версии, source, scope, кэш
 - [ontoship-package.md](ontoship-package.md) — анатомия плагина `ontoship`

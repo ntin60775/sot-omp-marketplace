@@ -20,8 +20,8 @@ links:
    ```bash
    cd ~/home/dev/personal/ontoship-omp
    # bump version в package.json (метаданные пакета) и коммит:
-   #   chore(release): 0.3.0 — версия пакета в манифесте
-   git tag -a v0.3.0 -m "v0.3.0 — что изменилось"
+   #   chore(release): 0.4.0 — версия пакета в манифесте
+   git tag -a v0.4.0 -m "v0.4.0 — что изменилось"
    git push --tags
    ```
 

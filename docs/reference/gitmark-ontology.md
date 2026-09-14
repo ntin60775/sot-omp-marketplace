@@ -1,9 +1,9 @@
 ---
 node_type: reference
-title: Онтология GitMark — словари, инварианты I1–I7, мини-парсер frontmatter
+title: Онтология GitMark — словари, инварианты I1–I8, мини-парсер frontmatter
 service: _platform
 status: active
-updated: 2026-08-30
+updated: 2026-09-14
 links:
   relates_to: [../services/gitmark-cli/README.md]
 ---
@@ -62,11 +62,11 @@ links:
 (этот репозиторий использует `_platform` для всех кросс-документов). Значение вне
 выведенного словаря — WARN (не ERR: словарь зависит от структуры папок).
 
-## Инварианты I1–I7 (что проверяет `gitmark lint`)
+## Инварианты I1–I8 (что проверяет `gitmark lint`)
 
 Код проверки — `cmd_lint` в
-`gitmark.py` (строки ~344–481)
-и `inventory_issues` (~550–582).
+`gitmark.py` (строки ~411–501), `ontology_twin_issues` (~607–622)
+и `inventory_issues` (~625–660).
 
 | # | Уровень | Инвариант |
 |---|---|---|
@@ -77,6 +77,7 @@ links:
 | I5 | WARN | На каждую папку под `docs/` — свой `README.md` (индекс). |
 | I6 | WARN | Цель `supersedes:` помечена `deprecated` или `archived` — иначе вытеснение не оформлено. |
 | I7 | ERR | Реестр `commands.md` синхронен дереву `.omp/`: таблицы между маркерами `<!-- BEGIN inventory:commands|skills -->` совпадают с генерацией, у каждой команды есть `args:` и `drives:` во frontmatter, секции `## /cmd` и файлы команд образуют одну пару. Лечится `gitmark inventory`. |
+| I8 | ERR/WARN | Модель онтологии не расходится с пакетной копией: тела `docs/ontology.md` (источник) и `skills/kb-curate/ontology.md` (payload) от первого заголовка `## ` обязаны совпадать (шапки копий могут отличаться). В репо-источнике пакета (плоская раскладка, `.omp/` — сам пакет) — ERR; при плагинной установке — WARN (своя модель потребителя может быть намеренно другой). Молчит, если копий меньше двух. |
 
 ## Мини-парсер frontmatter (почему нельзя вложенный YAML)
 

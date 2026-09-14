@@ -21,7 +21,7 @@ links:
 {
   "name": "sot-omp-marketplace",
   "owner": { "name": "sothale" },
-  "metadata": { "description": "…", "version": "0.2.0" },
+  "metadata": { "description": "…", "version": "0.3.0" },
   "plugins": [
     {
       "name": "ontoship",
@@ -29,9 +29,9 @@ links:
         "source": "git-subdir",
         "url": "git@github.com:ntin60775/ontoship-omp.git",
         "path": ".omp",
-        "ref": "v0.3.0"
+        "ref": "v0.4.0"
       },
-      "version": "0.3.0"
+      "version": "0.4.0"
     }
   ]
 }
@@ -42,8 +42,8 @@ links:
 - `metadata.version` — версия каталога;
 - `plugins[]` — записи плагинов (name, source, версия/ref).
 
-**Текущее состояние: version `0.2.0` (версия каталога), две записи** — `ontoship`
-v0.3.0 (git-subdir, `path: ".omp"`, `ref: "v0.3.0"`) и `1c` v0.1.1 (url,
+**Текущее состояние: version `0.3.0` (версия каталога), две записи** — `ontoship`
+v0.4.0 (git-subdir, `path: ".omp"`, `ref: "v0.4.0"`) и `1c` v0.1.1 (url,
 `ref: "v0.1.1"`). План [marketplace-delivery](../plans/marketplace-delivery/README.md)
 архивирован и не исполняется.
 

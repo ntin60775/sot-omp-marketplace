@@ -14,7 +14,7 @@ point: [../AGENTS.md](../AGENTS.md).
 ## Services
 
 - [Сервисы](services/README.md) — карточки подсистем
-  - [GitMark CLI](services/gitmark-cli/README.md) — движок KB: FTS5-поиск, lint I1–I7, реестр, карта
+  - [GitMark CLI](services/gitmark-cli/README.md) — движок KB: FTS5-поиск, lint I1–I8, реестр, карта
   - [dev-flow](services/dev-flow/README.md) — цикл поставки: план → тикеты → `/ship`
 
 ## Reference
