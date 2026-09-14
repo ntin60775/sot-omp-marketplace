@@ -2,15 +2,22 @@
 node_type: plan
 title: Поставка потребителям — реестр, обновление, снятие плоских копий
 service: _platform
-status: draft
+status: active
 updated: 2026-09-14
 links:
   depends_on: [../decisions/plugin-delivery.md, ../reference/consumer-registry.md]
   documents: [../../scripts/consumers.py, ../../schemas/consumer-registry.schema.json]
-  relates_to: [../reference/marketplace-catalog.md, ../ops/release-ontoship.md]
+  relates_to: [../reference/marketplace-catalog.md, ../ops/release-ontoship.md, ../ops/upgrade-consumers.md]
 ---
 
 # Контракт: поставка плагинов потребителям и их обновление
+
+> **Состояние на 2026-09-14.** Оператор авторизовал ран и разделил его на два шага.
+> **Шаг 1 (этот ран)**: инструмент `scripts/consumers.py`, тесты, runbook
+> [upgrade-consumers](../ops/upgrade-consumers.md), реестр — **отгружено**. **Шаг 2
+> (ждёт отдельного подтверждения)**: снятие плоских копий, установка плагинов
+> (`migrate --apply` → `upgrade --yes` → `verify`) в проектах машины и шаг установки в
+> `tasks/init-worktree.sh`. План остаётся `active`, пока шаг 2 не выполнен.
 
 ## Goal
 
@@ -75,8 +82,10 @@ links:
   Известные случаи: `retail/.omp/rules/worktree-omp.md` (нет ни в одном пакете),
   `ship-1c.md` (удалён из пакета `1c`), расхождения в правилах BSL у `erp-main`
   (8 файлов из 30) и `erp-mini`/`ut-10` (9 файлов).
-- Плагин не ставится поверх плоских копий: нативный провайдер (приоритет 100)
-  перекрывает плагинный (90), и получаются две расходящиеся правды.
+- Плагин **можно** ставить поверх плоских копий: копия перекрывает плагин (приоритет
+  100 против 90), поведение проекта не меняется, а `migrate` получает эталон для
+  классификации файлов. Недопустимо не снятие копий после установки, а **само
+  состояние двух правд**: `check` держит `legacy` как дрейф, пока копии на месте.
 - `--dry-run` инструмент реализует сам: `omp plugin upgrade --dry-run` флаг
   игнорирует и обновляет по-настоящему (проверено 2026-09-14 на `erp-demo`:
   `1c` 0.1.1 → 0.1.2 при `--dry-run`).
@@ -117,7 +126,5 @@ links:
 `sot-omp-core`; плоский список `~/ontoship-projects.txt` из архивного плана
 `marketplace-delivery`; валидация через python-модуль `jsonschema`.
 
-Открытый вопрос, который решает оператор до рана: **нужен ли `ontoship` проектам
-`retail` и `zupupr`**. В реестре у них записан только контур 1С (`unica` + `1c`) —
-по составу плоских копий KB-правил там нет. Если KB в этих проектах нужна, состав в
-реестре правится одной строкой до `upgrade`.
+Решено оператором до рана: **`ontoship` нужен и в `retail`, и в `zupupr`** — полный
+контур из трёх плагинов, как в `erp-demo`; состав в реестре обновлён 2026-09-14.

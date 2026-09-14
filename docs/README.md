@@ -30,6 +30,7 @@ point: [../AGENTS.md](../AGENTS.md).
 
 - [Ops](ops/README.md) — процедуры:
   [релиз ontoship](ops/release-ontoship.md),
+  [обновление потребителей](ops/upgrade-consumers.md),
   [bootstrap после клона](ops/bootstrap-after-clone.md)
 
 ## Decisions
