@@ -3,7 +3,7 @@ node_type: service
 title: GitMark CLI — движок базы знаний
 service: gitmark-cli
 status: active
-updated: 2026-08-30
+updated: 2026-09-14
 links:
   documents: [../../../tests/test_gitmark.py]
   relates_to: [../../reference/gitmark-ontology.md]
@@ -18,14 +18,15 @@ gitmark.py. Источник истины —
 регенерируется из md. Движок — чистый Python stdlib, работает оффлайн; поиск — SQLite
 FTS5: `bm25()` по терминам ∪ trigram-токенайзер (подстроки, опечатки, кириллица).
 
-## Канон и dogfood-копия
+## Дом и доставка движка
 
-- Канон движка: `plugins/ontoship/skills/kb-search/gitmark.py` — здесь правится код.
-- `.omp/skills/kb-search/gitmark.py` — генерируемая dogfood-копия корневой `.omp/`
-  (gitignore), синхронизируется sync-package.sh;
-  именно к ней обращаются скиллы и команды из рабочего проекта.
+- Движок разрабатывается в репозитории `ntin60775/ontoship-omp` — там правится код.
+- В этот репозиторий он доставляется установленным плагином `ontoship`
+  (каталог, git-subdir по тегу):
+  `.omp/plugins/node_modules/ontoship/skills/kb-search/gitmark.py` —
+  именно к нему обращаются скиллы и команды из рабочего проекта.
 - [tests/test_gitmark.py](../../../tests/test_gitmark.py) грузит модуль через `importlib`
-  по **каноническому** пути плагина, а не по копии.
+  по пути установленного плагина.
 
 ## Подкоманды CLI
 
@@ -77,8 +78,12 @@ trigram опционален (exit 2, «fuzzy/substring-поиск будет о
 
 ## Реестр: inventory и маркеры
 
-`inventory` сканирует `.omp/commands/*.md` и `.omp/skills/*/SKILL.md` (frontmatter:
-`description`, `args`, `drives`) и перегенерирует сводные таблицы в
+`inventory` сканирует команды и навыки двух слоёв: проект
+(`<проект>/.omp/commands/*.md`, `<проект>/.omp/skills/*/SKILL.md`) и пакет
+(`<пакет>/commands/*.md`, `<пакет>/skills/*/SKILL.md`; корень пакета резолвится от
+расположения самого движка — `PKG_ROOT`). При совпадении имён побеждает слой проекта
+(тот же приоритет, что у провайдеров omp: нативный выше плагинного). Frontmatter
+команд: `description`, `args`, `drives`. Перегенерирует сводные таблицы в
 docs/reference/commands.md между HTML-маркерами
 `<!-- BEGIN inventory:commands -->` / `<!-- END inventory:commands -->` (аналогично
 `inventory:skills`) — всё вне маркеров не трогается, операция идемпотентна.

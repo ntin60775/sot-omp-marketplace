@@ -3,12 +3,12 @@ node_type: index
 title: sot-omp-marketplace — KB
 service: _platform
 status: active
-updated: 2026-08-30
+updated: 2026-09-14
 ---
 
 # Knowledge base
 
-This repo is a personal **omp marketplace** (catalog + plugin sources). Entry
+This repo is a personal **omp marketplace** (catalog + KB). Entry
 point: [../AGENTS.md](../AGENTS.md).
 
 ## Services
