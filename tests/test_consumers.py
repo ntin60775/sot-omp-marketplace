@@ -586,6 +586,27 @@ def test_migrate_accept_unique_is_a_separate_decision(machine: Machine) -> None:
     assert not (path / ".omp" / "rules" / "own.md").exists()
 
 
+def test_verify_shows_failure_reason_even_beside_warnings(machine: Machine) -> None:
+    """Три [WARN] не должны вытеснять [FAIL]: провал важнее предупреждений."""
+    path = machine.project("broken", [("ontoship@sot-omp-marketplace", "project", "0.4.0")])
+    machine.package_file("ontoship@sot-omp-marketplace", "0.4.0", "skills/kb-search/gitmark.py",
+                         "import sys\nprint('ok')\n")
+    machine.package_file("ontoship@sot-omp-marketplace", "0.4.0", "scripts/deploy-check.sh",
+                         "#!/usr/bin/env bash\n"
+                         "echo '[FAIL] отсутствует: AGENTS.md'\n"
+                         "echo '[WARN] .gitignore: нет строки .gitmark/'\n"
+                         "echo '[WARN] .gitignore: нет строки *-map.html'\n"
+                         "echo '[WARN] .gitignore: нет строки .scratch/'\n"
+                         "echo 'deploy-check: exit=1'\nexit 1\n")
+    machine.consumer("broken", path, [("ontoship@sot-omp-marketplace", "project", "0.4.0")])
+
+    result = machine.run(machine.write_registry(), "verify", "--json")
+
+    assert result.returncode == 1
+    detail = {c["check"]: c for c in json.loads(result.stdout)["consumers"][0]["checks"]}["deploy-check"]["out"]
+    assert detail.startswith("[FAIL] отсутствует: AGENTS.md"), detail
+
+
 def test_migrate_report_does_not_count_kept_files_as_accepted(machine: Machine) -> None:
     """--keep сильнее --accept: сохранённый файл не попадает в «принято к снятию»."""
     path = machine.project("legacy", [("ontoship@sot-omp-marketplace", "project", "0.4.0")],

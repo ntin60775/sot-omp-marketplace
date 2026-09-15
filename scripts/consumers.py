@@ -634,9 +634,12 @@ def cmd_verify(registry: dict, args) -> int:
             result = _run(cmd, cwd=project)
             output = (result.stdout or result.stderr).strip()
             lines = [line for line in output.splitlines() if line.strip()]
-            # Причина важнее строки-итога: deploy-check завершает вывод «deploy-check: exit=N».
-            marked = [line for line in lines if line.startswith(("[WARN]", "[FAIL]"))]
-            detail = " · ".join(marked[-3:]) if marked else (lines[-1] if lines else "")
+            # Причина важнее строки-итога («deploy-check: exit=N»), а провал важнее
+            # предупреждений: иначе три [WARN] вытесняют единственный [FAIL].
+            fails = [line for line in lines if line.startswith("[FAIL]")]
+            warns = [line for line in lines if line.startswith("[WARN]")]
+            chosen = fails[:2] + warns[:2]
+            detail = " · ".join(chosen) if chosen else (lines[-1] if lines else "")
             # deploy-check: 0 — чисто, 1 — критика, 2 — предупреждения (пакет работает).
             if label == "deploy-check":
                 ok, warn = result.returncode in (0, 2), result.returncode == 2
