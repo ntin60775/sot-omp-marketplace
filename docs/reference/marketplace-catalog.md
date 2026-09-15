@@ -3,7 +3,7 @@ node_type: reference
 title: Контракт каталога omp-маркетплейса
 service: _platform
 status: active
-updated: 2026-09-14
+updated: 2026-09-15
 links:
   documents: [../../.omp-plugin/marketplace.json, ../../README.md]
   relates_to: [../plans/consumer-delivery.md, consumer-registry.md, ontoship-package.md]
@@ -29,9 +29,9 @@ links:
         "source": "git-subdir",
         "url": "git@github.com:ntin60775/ontoship-omp.git",
         "path": ".omp",
-        "ref": "v0.4.0"
+        "ref": "v0.4.1"
       },
-      "version": "0.4.0"
+      "version": "0.4.1"
     }
   ]
 }
@@ -43,7 +43,7 @@ links:
 - `plugins[]` — записи плагинов (name, source, версия/ref).
 
 **Текущее состояние: version `0.3.3` (версия каталога), две записи** — `ontoship`
-v0.4.0 (git-subdir, `path: ".omp"`, `ref: "v0.4.0"`) и `1c` v0.1.2 (url,
+v0.4.1 (git-subdir, `path: ".omp"`, `ref: "v0.4.1"`) и `1c` v0.1.2 (url,
 `ref: "v0.1.2"`). Кого эти записи обслуживают и что у них стоит фактически — реестр
 потребителей машины ([consumer-registry.md](consumer-registry.md)); работы по
 приведению машины к плагинной поставке — план

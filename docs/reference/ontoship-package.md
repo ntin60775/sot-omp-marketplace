@@ -3,7 +3,7 @@ node_type: reference
 title: Анатомия пакета ontoship
 service: _platform
 status: active
-updated: 2026-09-14
+updated: 2026-09-15
 links:
   relates_to: [marketplace-catalog.md, ../../AGENTS.md]
 ---
@@ -13,7 +13,7 @@ links:
 Пакет `ontoship` — GitMark KB (md+git, FTS5-поиск, онтология-линтер) +
 dev-flow «план → тикеты → ship». Разрабатывается в собственном репозитории
 `ntin60775/ontoship-omp`; в этот репозиторий он доставляется каталогом по
-тегу: запись `git-subdir` с `path: ".omp"` и `ref: "v0.4.0"`
+тегу: запись `git-subdir` с `path: ".omp"` и `ref: "v0.4.1"`
 ([контракт каталога](marketplace-catalog.md)). После установки пакет лежит в
 `.omp/plugins/node_modules/ontoship/` (gitignore).
 
