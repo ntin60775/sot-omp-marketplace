@@ -217,6 +217,7 @@ def test_check_names_every_drift_kind(machine: Machine) -> None:
     scoped = machine.project("scoped", [("ontoship@sot-omp-marketplace", "user", "0.4.0")], hook=installing)
     legacy = machine.project("legacy", [("ontoship@sot-omp-marketplace", "project", "0.4.0")],
                              flat=[".omp/rules"], hook=installing)
+    machine.package_file("ontoship@sot-omp-marketplace", "0.4.0", "rules/kb-first.md", "package text")
     (legacy / ".omp" / "rules" / "kb-first.md").write_text("старая копия", encoding="utf-8")
     gap = machine.project("gap", [("ontoship@sot-omp-marketplace", "project", "0.4.0")],
                           hook="echo 'поставь плагин сам'\n")
@@ -374,7 +375,8 @@ def test_migrate_report_deletes_nothing(machine: Machine) -> None:
     assert result.returncode == 0, result.stdout
     assert (path / ".omp" / "rules" / "kb-first.md").exists()
     assert (path / ".omp" / "rules" / "own.md").exists()
-    assert "совпадает 1 · расходится 0 · нет в пакетах 1" in result.stdout
+    assert "совпадает 1 · расходится 0 · свои 1" in result.stdout
+    assert "свои файлы проекта (остаются): .omp/rules/own.md" in result.stdout
 
 
 def test_migrate_apply_refuses_while_divergent_files_exist(machine: Machine) -> None:
@@ -412,6 +414,7 @@ def test_migrate_apply_removes_redundant_files_and_keeps_the_flagged(machine: Ma
 def test_scan_records_observed_state_and_repeats_identically(machine: Machine) -> None:
     path = machine.project("stale", [("ontoship@sot-omp-marketplace", "project", "0.3.0")],
                            flat=[".omp/rules"], hook="echo напоминание\n")
+    machine.package_file("ontoship@sot-omp-marketplace", "0.3.0", "rules/kb-first.md", "package text")
     (path / ".omp" / "rules" / "kb-first.md").write_text("старая копия", encoding="utf-8")
     machine.consumer("stale", path, [("ontoship@sot-omp-marketplace", "project", None)])
 
@@ -429,7 +432,7 @@ def test_scan_records_observed_state_and_repeats_identically(machine: Machine) -
 
     assert observed(first) == observed(second)
     assert observed(first) == {"installed": "0.3.0",
-                               "flat": [".omp/rules"],
+                               "flat": [".omp/rules/kb-first.md"],
                                "worktree": {"hook": "tasks/init-worktree.sh", "installsPlugins": False}}
 
 
@@ -567,23 +570,159 @@ def test_migrate_accept_divergent_removes_flagged_files(machine: Machine) -> Non
     assert not (path / ".omp" / "rules" / "kb-first.md").exists()
 
 
-def test_migrate_accept_unique_is_a_separate_decision(machine: Machine) -> None:
-    """Принять расходящиеся — не значит принять отсутствующие в пакетах."""
-    path = machine.project("legacy", [("ontoship@sot-omp-marketplace", "project", "0.4.0")],
+def test_migrate_keeps_project_own_files_and_removes_copies(machine: Machine) -> None:
+    """Свои файлы проекта — не копия пакета: --apply их оставляет, --accept-unique снимает."""
+    path = machine.project("mixed", [("ontoship@sot-omp-marketplace", "project", "0.4.0")],
                            flat=[".omp/rules"])
     machine.package_file("ontoship@sot-omp-marketplace", "0.4.0", "rules/kb-first.md", "package text")
-    (path / ".omp" / "rules" / "own.md").write_text("своё", encoding="utf-8")
-    machine.consumer("legacy", path, [("ontoship@sot-omp-marketplace", "project", "0.4.0")],
+    (path / ".omp" / "rules" / "kb-first.md").write_text("package text", encoding="utf-8")
+    (path / ".omp" / "rules" / "erp-main-test-contour.md").write_text("своё правило", encoding="utf-8")
+    machine.consumer("mixed", path, [("ontoship@sot-omp-marketplace", "project", "0.4.0")],
                      flat=[".omp/rules"])
 
-    divergent_only = machine.run(machine.write_registry(), "migrate", "--apply", "--accept-divergent")
-    assert divergent_only.returncode == 1
-    assert (path / ".omp" / "rules" / "own.md").exists()
+    kept = machine.run(machine.write_registry(), "migrate", "--apply")
 
-    unique_too = machine.run(machine.write_registry(), "migrate", "--apply", "--accept-unique")
+    assert kept.returncode == 0, kept.stdout
+    assert not (path / ".omp" / "rules" / "kb-first.md").exists(), "копия пакета снята"
+    assert (path / ".omp" / "rules" / "erp-main-test-contour.md").exists(), "свой файл остался"
 
-    assert unique_too.returncode == 0, unique_too.stdout
-    assert not (path / ".omp" / "rules" / "own.md").exists()
+    # Осознанное «снять и своё» — отдельный флаг.
+    (path / ".omp" / "rules" / "kb-first.md").write_text("package text", encoding="utf-8")
+    swept = machine.run(machine.write_registry(), "migrate", "--apply", "--accept-unique")
+
+    assert swept.returncode == 0, swept.stdout
+    assert not (path / ".omp" / "rules" / "erp-main-test-contour.md").exists()
+
+
+def test_hook_delegating_to_package_canon_counts_as_installing(machine: Machine) -> None:
+    """Обёртка над каноном: установку делает канон из пакета, а не файл проекта."""
+    canon = "skills/1c-project-bootstrap/scripts/init-worktree.sh"
+    path = machine.project("wrapper", [("1c@sot-omp-marketplace", "project", "0.1.2")])
+    (path / "tasks").mkdir(exist_ok=True)
+    (path / "tasks" / "init-worktree.sh").write_text(
+        '#!/usr/bin/env bash\nset -euo pipefail\nCANON="' + canon + '"\n'
+        'for base in "$ROOT" "$MAIN"; do\n'
+        '\tcandidate="$base/.omp/plugins/node_modules/1c-omp/$CANON"\n'
+        '\tif [[ -f "$candidate" ]]; then exec bash "$candidate" "$@"; fi\ndone\n',
+        encoding="utf-8")
+    machine.package_file("1c@sot-omp-marketplace", "0.1.2", canon,
+                         "#!/usr/bin/env bash\nomp plugin install --scope project x\n")
+    machine.consumer("wrapper", path, [("1c@sot-omp-marketplace", "project", "0.1.2")])
+
+    result = machine.run(machine.write_registry(), "check")
+
+    assert result.returncode == 0, result.stdout
+    assert "worktree-gap" not in result.stdout
+
+
+def test_reminder_in_echo_is_not_an_install_step(machine: Machine) -> None:
+    """Напоминание в echo — не установка: иначе гейт зеленеет, а ворктри остаются без плагинов."""
+    path = machine.project("reminder", [("ontoship@sot-omp-marketplace", "project", "0.4.0")])
+    (path / "tasks").mkdir(exist_ok=True)
+    (path / "tasks" / "init-worktree.sh").write_text(
+        "#!/usr/bin/env bash\necho 'Поставь плагин: omp plugin install --scope project ontoship@x' >&2\n",
+        encoding="utf-8")
+    machine.consumer("reminder", path, [("ontoship@sot-omp-marketplace", "project", "0.4.0")])
+
+    result = machine.run(machine.write_registry(), "check")
+
+    assert result.returncode == 1
+    assert "worktree-gap" in result.stdout
+
+
+def test_reminder_in_canon_echo_is_not_an_install_step(machine: Machine) -> None:
+    canon = "skills/1c-project-bootstrap/scripts/init-worktree.sh"
+    path = machine.project("wrapper", [("1c@sot-omp-marketplace", "project", "0.1.2")])
+    (path / "tasks").mkdir(exist_ok=True)
+    (path / "tasks" / "init-worktree.sh").write_text(
+        '#!/usr/bin/env bash\nCANON="' + canon + '"\nexec bash "$ROOT/.omp/plugins/node_modules/1c-omp/$CANON" "$@"\n',
+        encoding="utf-8")
+    machine.package_file("1c@sot-omp-marketplace", "0.1.2", canon,
+                         "#!/usr/bin/env bash\necho 'не забудь: omp plugin install --scope project 1c@x'\n")
+    machine.consumer("wrapper", path, [("1c@sot-omp-marketplace", "project", "0.1.2")])
+
+    result = machine.run(machine.write_registry(), "check")
+
+    assert result.returncode == 1
+    assert "worktree-gap" in result.stdout
+
+
+def test_install_step_inside_quotes_is_still_code(machine: Machine) -> None:
+    """Команда в коде рядом с echo — установка; срезаем только кавычки, не строку."""
+    canon = "skills/1c-project-bootstrap/scripts/init-worktree.sh"
+    path = machine.project("wrapper", [("1c@sot-omp-marketplace", "project", "0.1.2")])
+    (path / "tasks").mkdir(exist_ok=True)
+    (path / "tasks" / "init-worktree.sh").write_text(
+        '#!/usr/bin/env bash\nCANON="' + canon + '"\nexec bash "$ROOT/$CANON" "$@"\n', encoding="utf-8")
+    machine.package_file("1c@sot-omp-marketplace", "0.1.2", canon,
+                         '#!/usr/bin/env bash\n'
+                         'if (cd "$WORKTREE" && omp plugin install --scope project "$spec"); then\n'
+                         '\techo "✓ плагин $spec"\nfi\n')
+    machine.consumer("wrapper", path, [("1c@sot-omp-marketplace", "project", "0.1.2")])
+
+    result = machine.run(machine.write_registry(), "check")
+
+    assert result.returncode == 0, result.stdout
+    assert "worktree-gap" not in result.stdout
+
+
+def test_hook_delegating_to_silent_canon_is_a_gap(machine: Machine) -> None:
+    canon = "skills/1c-project-bootstrap/scripts/init-worktree.sh"
+    path = machine.project("wrapper", [("1c@sot-omp-marketplace", "project", "0.1.2")])
+    (path / "tasks").mkdir(exist_ok=True)
+    (path / "tasks" / "init-worktree.sh").write_text(
+        '#!/usr/bin/env bash\nCANON="' + canon + '"\nexec bash "$ROOT/.omp/plugins/node_modules/1c-omp/$CANON" "$@"\n',
+        encoding="utf-8")
+    machine.package_file("1c@sot-omp-marketplace", "0.1.2", canon,
+                         "#!/usr/bin/env bash\necho 'копирую артефакты'\n")
+    machine.consumer("wrapper", path, [("1c@sot-omp-marketplace", "project", "0.1.2")])
+
+    result = machine.run(machine.write_registry(), "check")
+
+    assert result.returncode == 1
+    assert "worktree-gap" in result.stdout
+
+
+def test_flat_copies_without_installed_packages_are_not_called_own(machine: Machine) -> None:
+    """Пока пакет не поставлен, файлы под .omp/<dir> нельзя объявить своими: это может быть копия."""
+    path = machine.project("flatonly", flat=[".omp/rules"])
+    (path / ".omp" / "rules" / "kb-first.md").write_text("копия пакета", encoding="utf-8")
+    machine.consumer("flatonly", path, [("ontoship@sot-omp-marketplace", "project", None)])
+
+    result = machine.run(machine.write_registry(), "check")
+
+    assert result.returncode == 1
+    assert "legacy-unverified" in result.stdout
+    assert "own-rules" not in result.stdout
+
+
+def test_own_rules_warns_when_an_expected_package_is_missing(machine: Machine) -> None:
+    """Свои файлы рядом с непоставленным пакетом — мягко, но с оговоркой."""
+    other = machine.project("mixed", [("unica@unica", "project", "0.12.3")], flat=[".omp/rules"])
+    machine.package_file("unica@unica", "0.12.3", "skills/x/SKILL.md", "пакет unica")
+    (other / ".omp" / "rules" / "kb-first.md").write_text("копия ontoship", encoding="utf-8")
+    machine.consumer("mixed", other, [("unica@unica", "project", "0.12.3"),
+                                      ("ontoship@sot-omp-marketplace", "project", None)])
+
+    result = machine.run(machine.write_registry(), "check")
+
+    assert result.returncode == 1, "missing делает гейт красным"
+    assert "сначала upgrade" in result.stdout
+    assert "ontoship@sot-omp-marketplace" in result.stdout
+
+
+def test_project_own_files_are_not_drift(machine: Machine) -> None:
+    """Файл проекта под неплагинным именем — не копия пакета и не повод для красного гейта."""
+    path = machine.project("own", [("ontoship@sot-omp-marketplace", "project", "0.4.0")],
+                           flat=[".omp/rules"], hook="omp plugin install --scope project x\n")
+    machine.package_file("ontoship@sot-omp-marketplace", "0.4.0", "rules/kb-first.md", "package text")
+    (path / ".omp" / "rules" / "erp-main-test-contour.md").write_text("своё правило", encoding="utf-8")
+    machine.consumer("own", path, [("ontoship@sot-omp-marketplace", "project", "0.4.0")])
+
+    result = machine.run(machine.write_registry(), "check")
+
+    assert result.returncode == 0, result.stdout
+    assert "own-rules" in result.stdout and "legacy" not in result.stdout
 
 
 def test_verify_shows_failure_reason_even_beside_warnings(machine: Machine) -> None:
@@ -763,11 +902,11 @@ def test_migrate_keep_absolute_path_of_one_of_two_consumers(machine: Machine) ->
     result = machine.run(machine.write_registry(), "migrate", "--apply",
                          "--keep", str(alpha / ".omp" / "rules" / "own.md"))
 
-    assert result.returncode == 1, "beta со своим файлом отклонена — это ожидаемо"
+    assert result.returncode == 0, result.stdout + result.stderr
     assert (alpha / ".omp" / "rules" / "own.md").exists()
     assert not (alpha / ".omp" / "rules" / "kb-first.md").exists()
-    assert (beta / ".omp" / "rules" / "own.md").exists(), "чужой путь не спасает файл"
-    assert (beta / ".omp" / "rules" / "kb-first.md").exists(), "beta отклонена целиком"
+    assert (beta / ".omp" / "rules" / "own.md").exists(), "свой файл beta остаётся и без --keep"
+    assert not (beta / ".omp" / "rules" / "kb-first.md").exists(), "чужой --keep не мешает beta"
 
 
 def test_plugin_absent_from_catalog_is_reported(machine: Machine) -> None:

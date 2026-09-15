@@ -29,6 +29,7 @@ DEFAULT_MARKETPLACES = Path.home() / ".omp" / "marketplaces.json"
 FLAT_DIRS = (".omp/skills", ".omp/rules", ".omp/commands", ".omp/scripts")
 WORKTREE_HOOK = "tasks/init-worktree.sh"
 INSTALL_STEP = re.compile(r"omp\s+plugin\s+(?:install|upgrade)")
+SCRIPT_REF = re.compile(r"[\w][\w./-]*\.sh")
 DISCOVER_MAX_DEPTH = 3
 
 EXIT_OK = 0
@@ -165,8 +166,71 @@ def _run(cmd: list[str], cwd: Path) -> subprocess.CompletedProcess:
         raise UsageError(f"не найден исполняемый файл: {cmd[0]}") from None
 
 
+def package_paths(plugins: dict) -> set[str]:
+    """Пути файлов поставленных пакетов (относительно корня пакета) — эталон перекрытия."""
+    paths: set[str] = set()
+    for plugin in plugins.values():
+        root = plugin.get("installPath")
+        if not root:
+            continue
+        for path in Path(root).rglob("*"):
+            if path.is_file():
+                paths.add(str(path.relative_to(root)))
+    return paths
+
+
+def _installs_plugins(text: str) -> bool:
+    """Ставит ли скрипт плагины — по коду, а не по упоминанию.
+
+    `echo 'Поставь плагин: omp plugin install …'` — напоминание, а не установка.
+    Поэтому кавычки срезаются, а строки-комментарии пропускаются: ложное «ставит»
+    опаснее ложного «не ставит» — оно прячет ворктри без плагинов.
+    """
+    for line in text.splitlines():
+        code = line.strip()
+        if code.startswith("#"):
+            continue
+        if INSTALL_STEP.search(re.sub(r"'[^']*'|\"[^\"]*\"", "", code)):
+            return True
+    return False
+
+
+def worktree_hook_state(project: Path, plugins: dict) -> dict:
+    """Готовит ли проект ворктри и ставит ли он в них плагины.
+
+    Хук бывает обёрткой над каноном из пакета (`exec bash .../init-worktree.sh`),
+    и тогда установку делает канон — смотреть только на файл проекта недостаточно.
+    """
+    hook = project / WORKTREE_HOOK
+    if not hook.is_file():
+        return {"hook": None, "installsPlugins": False}
+
+    text = hook.read_text(encoding="utf-8", errors="replace")
+    installs = _installs_plugins(text)
+    if not installs:
+        roots = [p["installPath"] for p in plugins.values() if p.get("installPath")]
+        for candidate in sorted(set(SCRIPT_REF.findall(text))):
+            for root in roots:
+                script = Path(root) / candidate
+                if script.is_file() and _installs_plugins(
+                        script.read_text(encoding="utf-8", errors="replace")):
+                    installs = True
+                    break
+            if installs:
+                break
+    return {"hook": WORKTREE_HOOK, "installsPlugins": installs}
+
+
 def observe(project: Path) -> dict:
-    """Живое наблюдение проекта: плагины, плоские копии, шаг инициализации ворктри."""
+    """Живое наблюдение проекта: плагины, копии пакета, свои файлы, шаг инициализации ворктри.
+
+    Различаются два разных состояния под `.omp/<dir>`:
+    - `shadowing` — файл, чей путь есть в поставленном пакете: он перекрывает плагинное
+      правило (нативный провайдер, приоритет 100) и подлежит снятию;
+    - `project_own` — файл, которого нет ни в одном пакете: это собственное знание
+      проекта (ADR plugin-delivery: проектная конкретика живёт в проекте под именем,
+      не совпадающим с плагинным) — снимать его нельзя.
+    """
     if not (project / ".omp").is_dir():
         raise UsageError(f"нет .omp/ — это не потребитель: {project}")
 
@@ -188,14 +252,35 @@ def observe(project: Path) -> dict:
                 "installPath": installed.get("installPath"),
             }
 
-    hook = project / WORKTREE_HOOK
-    installs = bool(hook.is_file() and INSTALL_STEP.search(hook.read_text(encoding="utf-8", errors="replace")))
+    packages = package_paths(plugins)
+    flat, shadowing, project_own, unverifiable = [], [], [], []
+    for directory in FLAT_DIRS:
+        root = project / directory
+        if not root.is_dir():
+            continue
+        files = [path for path in sorted(root.rglob("*")) if path.is_file()]
+        if not files:
+            continue  # пустой каталог ничего не перекрывает
+        flat.append(directory)
+        for path in files:
+            relative = str(path.relative_to(project))
+            inside = f"{Path(directory).name}/{path.relative_to(root)}"
+            if not packages:
+                # Пакетов нет — сравнивать не с чем: назвать файл «своим» значило бы
+                # спрятать копию пакета (она станет видна после upgrade).
+                unverifiable.append(relative)
+            elif inside in packages:
+                shadowing.append(relative)
+            else:
+                project_own.append(relative)
+
     return {
         "plugins": plugins,
-        # Пустой каталог — не копия пакета: он ничего не перекрывает.
-        "flat": [d for d in FLAT_DIRS
-                 if (project / d).is_dir() and any(path.is_file() for path in (project / d).rglob("*"))],
-        "worktree": {"hook": WORKTREE_HOOK if hook.is_file() else None, "installsPlugins": installs},
+        "flat": flat,
+        "shadowing": shadowing,
+        "project_own": project_own,
+        "unverifiable": unverifiable,
+        "worktree": worktree_hook_state(project, plugins),
     }
 
 
@@ -303,9 +388,27 @@ def drift_for(consumer: dict, observed: dict, wanted: dict[str, str | None],
             drifts.append({"kind": "stale", "plugin": plugin_id, "installed": version,
                            "detail": f"стоит {version}, в каталоге {target}"})
 
-    if observed["flat"]:
+    if observed["shadowing"]:
+        shown = ", ".join(observed["shadowing"][:3])
+        more = f" и ещё {len(observed['shadowing']) - 3}" if len(observed["shadowing"]) > 3 else ""
         drifts.append({"kind": "legacy", "plugin": None, "installed": None,
-                       "detail": "плоские копии: " + ", ".join(observed["flat"])})
+                       "detail": f"перекрывают пакет: {len(observed['shadowing'])} файлов ({shown}{more})"})
+    if observed["unverifiable"]:
+        # Пакетов нет — файлы под .omp/<dir> могут быть и копией, и своим: молчать нельзя,
+        # иначе копия пакета выглядела бы «своим файлом» и гейт остался бы зелёным.
+        drifts.append({"kind": "legacy-unverified", "plugin": None, "installed": None,
+                       "detail": f"сравнивать не с чем (пакеты не поставлены): "
+                                 f"{len(observed['unverifiable'])} файлов под .omp/<dir> — сначала upgrade"})
+    if observed["project_own"]:
+        # Свои файлы проекта — не дрейф: под неплагинными именами им и положено жить здесь.
+        # Но если ожидаемый пакет не поставлен, часть из них может быть его копией —
+        # различить это можно только после upgrade, и молчать об этом нельзя.
+        not_installed = [e["id"] for e in consumer["plugins"]
+                         if observed["plugins"].get(e["id"]) is None]
+        caveat = (f" — часть может быть копией непоставленного пакета "
+                  f"({', '.join(not_installed)}): сначала upgrade" if not_installed else "")
+        drifts.append({"kind": "own-rules", "plugin": None, "installed": None,
+                       "detail": f"свои файлы проекта: {len(observed['project_own'])}{caveat}"})
     # Гэп только там, где проект ворктри готовит: скрипт есть, а плагинов в нём нет.
     # Отсутствие скрипта — вопрос раскладки проекта, а не дрейф потребителя.
     if observed["worktree"]["hook"] and not observed["worktree"]["installsPlugins"]:
@@ -315,7 +418,9 @@ def drift_for(consumer: dict, observed: dict, wanted: dict[str, str | None],
 
 
 def hard_drift(drifts: list[dict]) -> list[dict]:
-    return [d for d in drifts if d["kind"] != "pinned"]
+    """Мягкие виды не делают гейт красным: `pinned` — сознательный выбор,
+    `own-rules` — собственные файлы проекта под неплагинными именами."""
+    return [d for d in drifts if d["kind"] not in ("pinned", "own-rules")]
 
 
 def safe_observe(project: Path) -> tuple[dict | None, str | None]:
@@ -365,7 +470,7 @@ def _record(registry: dict, consumer: dict, observed: dict) -> None:
     for entry in consumer["plugins"]:
         installed = observed["plugins"].get(entry["id"])
         entry["installed"] = installed["version"] if installed else None
-    consumer["legacy"] = {"flat": observed["flat"]}
+    consumer["legacy"] = {"flat": observed["shadowing"] + observed["unverifiable"]}
     consumer["worktreeInit"] = observed["worktree"]
     consumer["lastChecked"] = utcnow()
 
@@ -384,6 +489,8 @@ def cmd_discover(registry: dict, args) -> int:
             "path": consumer["path"],
             "plugins": {k: v["version"] for k, v in observed["plugins"].items()},
             "flat": observed["flat"],
+            "shadowing": len(observed["shadowing"]),
+            "own": len(observed["project_own"]),
         })
     found = unmanaged(registry)
     if args.json:
@@ -395,8 +502,8 @@ def cmd_discover(registry: dict, args) -> int:
             print(f"  ✗ {row['name']:<22} {row['error']}")
             continue
         plugins = ", ".join(f"{k}={v}" for k, v in row["plugins"].items()) or "плагинов нет"
-        flat = f" · плоские копии: {', '.join(row['flat'])}" if row["flat"] else ""
-        print(f"  {row['name']:<22} {plugins}{flat}")
+        copies = f" · перекрывают пакет: {row['shadowing']} · свои: {row['own']}" if row["flat"] else ""
+        print(f"  {row['name']:<22} {plugins}{copies}")
     if found:
         print("\nНе в реестре (кандидаты):")
         for path in found:
@@ -460,7 +567,7 @@ def cmd_check(registry: dict, args) -> int:
                 print(f"  ✓ {row['name']:<22} чисто")
                 continue
             for drift in row["drifts"]:
-                mark = "•" if drift["kind"] == "pinned" else "✗"
+                mark = "•" if drift["kind"] in ("pinned", "own-rules") else "✗"
                 target = f"{drift['plugin']}: " if drift["plugin"] else ""
                 print(f"  {mark} {row['name']:<22} {drift['kind']:<13} {target}{drift['detail']}")
         if found:
@@ -745,8 +852,9 @@ def cmd_migrate(registry: dict, args) -> int:
     errors: list[dict] = []
     refused = 0
     consumed_absolute: set[str] = set()
-    # Расходящиеся и отсутствующие в пакетах файлы снимаются только по явному решению
-    # оператора: без флага они блокируют снятие целиком.
+    # Снимаются только копии пакета: `identical` — по совпадению, `divergent` — по
+    # явному решению оператора. `unique` — свои файлы проекта: по умолчанию остаются,
+    # `--accept-unique` снимает и их. `unverifiable` не принимается никогда.
     accepted = {kind for kind, flag in (("divergent", args.accept_divergent),
                                         ("unique", args.accept_unique)) if flag}
 
@@ -765,7 +873,7 @@ def cmd_migrate(registry: dict, args) -> int:
             continue
         classification, reference = _classify(project, observed)
         blockers = [row["path"] for rows in classification.values() for row in rows
-                    if row["kind"] in ("divergent", "unique", "unverifiable")
+                    if row["kind"] in ("divergent", "unverifiable")
                     and row["kind"] not in accepted
                     and row["path"] not in keep]
         plans.append({"name": consumer["name"], "path": str(project), "flat": classification,
@@ -790,7 +898,7 @@ def cmd_migrate(registry: dict, args) -> int:
                 for row in rows:
                     counts[row["kind"]] += 1
                 print(f"      {flat:<16} совпадает {counts['identical']} · "
-                      f"расходится {counts['divergent']} · нет в пакетах {counts['unique']}")
+                      f"расходится {counts['divergent']} · свои {counts['unique']}")
             if plan["accepted"]:
                 kept = set(plan["keep"])
                 taken = {"divergent": 0, "unique": 0}
@@ -808,14 +916,15 @@ def cmd_migrate(registry: dict, args) -> int:
                 for item in row:
                     if item["kind"] == "divergent":
                         print(f"      расходится с пакетом: {item['path']}")
-            pending = [item["path"] for row in plan["flat"].values() for item in row
-                       if item["kind"] == "unique" and item["path"] not in set(plan["keep"])]
-            for path in pending[:10]:
-                print(f"      нет в пакетах: {path}")
-            if len(pending) > 10:
-                print(f"      … ещё {len(pending) - 10} (полный список: migrate --json)")
-        print("\nЭто отчёт. Применение — migrate --apply (файлы, требующие решения, блокируют его; "
-              "сохранить их можно через --keep, снять осознанно — через --accept-divergent/--accept-unique).")
+            own = [item["path"] for row in plan["flat"].values() for item in row
+                   if item["kind"] == "unique" and "unique" not in set(plan["accepted"])]
+            for path in own[:10]:
+                print(f"      свои файлы проекта (остаются): {path}")
+            if len(own) > 10:
+                print(f"      … ещё {len(own) - 10} (полный список: migrate --json)")
+        print("\nЭто отчёт. Применение — migrate --apply: снимает копии пакета, свои файлы проекта "
+              "оставляет. Расходящиеся копии — по решению оператора (--accept-divergent), "
+              "свои файлы — только если их надо снять тоже (--accept-unique); --keep сильнее обоих.")
         return EXIT_DRIFT if errors else EXIT_OK
 
     results = []
@@ -828,22 +937,27 @@ def cmd_migrate(registry: dict, args) -> int:
             if kinds == {"unverifiable"}:
                 reason = "эталон недоступен: плагины не поставлены — сначала upgrade --yes"
             else:
-                counts = {"divergent": 0, "unique": 0, "unverifiable": 0}
+                counts = {"divergent": 0, "unverifiable": 0}
                 for item in blocked:
                     counts[item["kind"]] += 1
                 reason = (f"{len(blocked)} файлов требуют решения: "
-                          f"расходится с пакетом {counts['divergent']} · нет в пакетах {counts['unique']} "
-                          f"(снять осознанно: --accept-divergent / --accept-unique)")
+                          f"расходится с пакетом {counts['divergent']}"
+                          + (f" · эталон недоступен {counts['unverifiable']}" if counts["unverifiable"] else "")
+                          + " (снять осознанно: --accept-divergent)")
             results.append({"name": plan["name"], "applied": False, "removed": 0, "reason": reason})
             if not args.json:
                 print(f"  ✗ {plan['name']}: снятие отклонено — {reason}")
             continue
         project = Path(plan["path"])
         keep = set(plan["keep"])
-        removed = 0
+        accepted = set(plan["accepted"])
+        removed, own_kept = 0, 0
         for rows in plan["flat"].values():
             for row in rows:
                 if row["path"] in keep:
+                    continue
+                if row["kind"] == "unique" and "unique" not in accepted:
+                    own_kept += 1  # свои файлы проекта остаются: это не копия пакета
                     continue
                 (project / row["path"]).unlink()
                 removed += 1
@@ -853,9 +967,11 @@ def cmd_migrate(registry: dict, args) -> int:
                     directory.rmdir()
             if (project / flat).is_dir() and not any((project / flat).iterdir()):
                 (project / flat).rmdir()
-        results.append({"name": plan["name"], "applied": True, "removed": removed, "reason": None})
+        results.append({"name": plan["name"], "applied": True, "removed": removed,
+                        "own_kept": own_kept, "reason": None})
         if not args.json:
-            print(f"  ✓ {plan['name']:<22} снято файлов: {removed}")
+            tail = f" · свои файлы оставлены: {own_kept}" if own_kept else ""
+            print(f"  ✓ {plan['name']:<22} снято файлов: {removed}{tail}")
 
     if args.json:
         print(json.dumps({"consumers": results, "errors": errors, "applied": True},
