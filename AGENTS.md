@@ -44,6 +44,9 @@ Supersedes the 2026-08-30 decision. Full record:
 - **Consumers are tracked locally**: `.consumers.json` (gitignored) lists every
   project on this machine that consumes the catalog, with observed versions and
   flat copies — [docs/reference/consumer-registry.md](docs/reference/consumer-registry.md).
+- **Consumer repo layout**: what a consumer versions and what it ignores (delivered
+  files live in the plugin repos, not in the project) —
+  [docs/reference/consumer-repo-layout.md](docs/reference/consumer-repo-layout.md).
 
 ## Start here
 

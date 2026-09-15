@@ -3,7 +3,7 @@ node_type: plan
 title: Поставка потребителям — реестр, обновление, снятие плоских копий
 service: _platform
 status: active
-updated: 2026-09-14
+updated: 2026-09-15
 links:
   depends_on: [../decisions/plugin-delivery.md, ../reference/consumer-registry.md]
   documents: [../../scripts/consumers.py, ../../schemas/consumer-registry.schema.json]
@@ -129,3 +129,14 @@ links:
 
 Решено оператором до рана: **`ontoship` нужен и в `retail`, и в `zupupr`** — полный
 контур из трёх плагинов, как в `erp-demo`; состав в реестре обновлён 2026-09-14.
+
+## Следующий срез (не начат)
+
+- **Политика `.gitignore` у потребителей** описана в
+  [consumer-repo-layout](../reference/consumer-repo-layout.md) и применена к
+  отслеживаемым репозиториям 2026-09-15; **проверки в инструменте нет** — стоит
+  добавить в `check` вид дрейфа `gitignore` (доставленное не должно быть в git),
+  иначе политика снова разъедется.
+- **KB в `retail`** развёрнута вручную (AGENTS.md, docs/, реестр команд) — тот же
+  набор шагов стоит оформить как навык или подкоманду, потому что остальным
+  потребителям без KB он тоже понадобится.
