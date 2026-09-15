@@ -25,7 +25,7 @@ links:
 | `.omp/skills/`, `.omp/commands/`, `.omp/scripts/` | payload плагинов: источник истины — их репозитории, версия пинится записью каталога |
 | `.omp/RULES.md`, `.omp/APPEND_SYSTEM.md` | машинный слой (`sot-omp-core`), доставляется sync-скриптом |
 | `.omp/mcp.json` | локальная конфигурация MCP (порты, пути машины) |
-| `.omp/.backup-*/` | локальные бэкапы перед снятием копий |
+| `.omp/.backup-*` | локальные бэкапы перед снятием копий |
 | `.gitmark/`, `*-map.html` | производное KB — пересобирается `gitmark index` / `map` из markdown |
 | `.scratch/`, `.artifacts/` | локальные рабочие артефакты агента |
 
@@ -54,7 +54,7 @@ links:
 .omp/RULES.md
 .omp/APPEND_SYSTEM.md
 .omp/mcp.json
-.omp/.backup-*/
+.omp/.backup-*
 
 # Производное KB (пересобирается из markdown) и локальные артефакты
 .gitmark/
