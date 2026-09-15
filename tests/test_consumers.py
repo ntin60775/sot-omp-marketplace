@@ -217,6 +217,7 @@ def test_check_names_every_drift_kind(machine: Machine) -> None:
     scoped = machine.project("scoped", [("ontoship@sot-omp-marketplace", "user", "0.4.0")], hook=installing)
     legacy = machine.project("legacy", [("ontoship@sot-omp-marketplace", "project", "0.4.0")],
                              flat=[".omp/rules"], hook=installing)
+    (legacy / ".omp" / "rules" / "kb-first.md").write_text("старая копия", encoding="utf-8")
     gap = machine.project("gap", [("ontoship@sot-omp-marketplace", "project", "0.4.0")],
                           hook="echo 'поставь плагин сам'\n")
     pinned = machine.project("pinned", [("ontoship@sot-omp-marketplace", "project", "0.3.0")], hook=installing)
@@ -344,6 +345,7 @@ def test_upgrade_installs_over_flat_copies_and_points_at_migrate(machine: Machin
     но оператор обязан увидеть, что дальше нужен migrate."""
     pinned = machine.project("pinned", [("ontoship@sot-omp-marketplace", "project", "0.3.0")])
     legacy = machine.project("legacy", flat=[".omp/rules"])
+    (legacy / ".omp" / "rules" / "kb-first.md").write_text("старая копия", encoding="utf-8")
     machine.consumer("pinned", pinned, [("ontoship@sot-omp-marketplace", "project", "0.3.0")])
     machine.consumer("legacy", legacy, [("ontoship@sot-omp-marketplace", "project", None)],
                      flat=[".omp/rules"])
@@ -410,6 +412,7 @@ def test_migrate_apply_removes_redundant_files_and_keeps_the_flagged(machine: Ma
 def test_scan_records_observed_state_and_repeats_identically(machine: Machine) -> None:
     path = machine.project("stale", [("ontoship@sot-omp-marketplace", "project", "0.3.0")],
                            flat=[".omp/rules"], hook="echo напоминание\n")
+    (path / ".omp" / "rules" / "kb-first.md").write_text("старая копия", encoding="utf-8")
     machine.consumer("stale", path, [("ontoship@sot-omp-marketplace", "project", None)])
 
     registry = machine.write_registry()
@@ -496,6 +499,109 @@ def test_missing_omp_is_a_usage_error(machine: Machine) -> None:
     assert "не найден исполняемый файл omp" in result.stderr
 
 
+def test_empty_flat_directory_is_not_a_copy(machine: Machine) -> None:
+    """Пустой .omp/rules ничего не перекрывает — это не legacy."""
+    path = machine.project("emptied", [("ontoship@sot-omp-marketplace", "project", "0.4.0")],
+                           hook="omp plugin install --scope project x\n")
+    (path / ".omp" / "rules").mkdir(parents=True)
+    machine.consumer("emptied", path, [("ontoship@sot-omp-marketplace", "project", "0.4.0")])
+
+    result = machine.run(machine.write_registry(), "check")
+
+    assert result.returncode == 0, result.stdout
+    assert "legacy" not in result.stdout
+
+
+def test_verify_counts_deploy_check_warnings_as_non_failure(machine: Machine) -> None:
+    """deploy-check: 0 — чисто, 2 — предупреждения, 1 — критика. Двойка не провал."""
+    path = machine.project("warned", [("ontoship@sot-omp-marketplace", "project", "0.4.0")])
+    machine.package_file("ontoship@sot-omp-marketplace", "0.4.0", "skills/kb-search/gitmark.py",
+                         "import sys\nprint('ok')\n")
+    machine.package_file("ontoship@sot-omp-marketplace", "0.4.0", "scripts/deploy-check.sh",
+                         "#!/usr/bin/env bash\necho '[WARN] .gitignore: нет строки .scratch/'\necho 'deploy-check: exit=2'\nexit 2\n")
+    machine.consumer("warned", path, [("ontoship@sot-omp-marketplace", "project", "0.4.0")])
+
+    result = machine.run(machine.write_registry(), "verify", "--json")
+
+    assert result.returncode == 0, result.stdout
+    checks = {c["check"]: c for c in json.loads(result.stdout)["consumers"][0]["checks"]}
+    assert checks["deploy-check"]["ok"] is True and checks["deploy-check"]["warn"] is True
+    assert checks["deploy-check"]["out"].startswith("[WARN]"), "причина важнее строки-итога"
+    assert ".scratch/" in checks["deploy-check"]["out"]
+    assert checks["index"]["ok"] is True and checks["index"]["warn"] is False
+
+
+def test_verify_human_output_marks_warnings(machine: Machine) -> None:
+    path = machine.project("warned", [("ontoship@sot-omp-marketplace", "project", "0.4.0")])
+    machine.package_file("ontoship@sot-omp-marketplace", "0.4.0", "skills/kb-search/gitmark.py",
+                         "import sys\nprint('ok')\n")
+    machine.package_file("ontoship@sot-omp-marketplace", "0.4.0", "scripts/deploy-check.sh",
+                         "#!/usr/bin/env bash\necho '[WARN] .gitignore: нет строки .scratch/'\n"
+                         "echo 'deploy-check: exit=2'\nexit 2\n")
+    machine.consumer("warned", path, [("ontoship@sot-omp-marketplace", "project", "0.4.0")])
+
+    result = machine.run(machine.write_registry(), "verify")
+
+    assert result.returncode == 0, result.stdout
+    assert "deploy-check:⚠" in result.stdout
+    assert "[WARN] .gitignore: нет строки .scratch/" in result.stdout
+
+
+def test_migrate_accept_divergent_removes_flagged_files(machine: Machine) -> None:
+    """Без флага расходящийся файл блокирует; с флагом — снимается по решению оператора."""
+    path = machine.project("legacy", [("ontoship@sot-omp-marketplace", "project", "0.4.0")],
+                           flat=[".omp/rules"])
+    machine.package_file("ontoship@sot-omp-marketplace", "0.4.0", "rules/kb-first.md", "package text")
+    (path / ".omp" / "rules" / "kb-first.md").write_text("local edit", encoding="utf-8")
+    machine.consumer("legacy", path, [("ontoship@sot-omp-marketplace", "project", "0.4.0")],
+                     flat=[".omp/rules"])
+
+    refused = machine.run(machine.write_registry(), "migrate", "--apply")
+    assert refused.returncode == 1
+    assert (path / ".omp" / "rules" / "kb-first.md").exists()
+    assert "--accept-divergent" in refused.stdout
+
+    accepted = machine.run(machine.write_registry(), "migrate", "--apply", "--accept-divergent")
+
+    assert accepted.returncode == 0, accepted.stdout
+    assert not (path / ".omp" / "rules" / "kb-first.md").exists()
+
+
+def test_migrate_accept_unique_is_a_separate_decision(machine: Machine) -> None:
+    """Принять расходящиеся — не значит принять отсутствующие в пакетах."""
+    path = machine.project("legacy", [("ontoship@sot-omp-marketplace", "project", "0.4.0")],
+                           flat=[".omp/rules"])
+    machine.package_file("ontoship@sot-omp-marketplace", "0.4.0", "rules/kb-first.md", "package text")
+    (path / ".omp" / "rules" / "own.md").write_text("своё", encoding="utf-8")
+    machine.consumer("legacy", path, [("ontoship@sot-omp-marketplace", "project", "0.4.0")],
+                     flat=[".omp/rules"])
+
+    divergent_only = machine.run(machine.write_registry(), "migrate", "--apply", "--accept-divergent")
+    assert divergent_only.returncode == 1
+    assert (path / ".omp" / "rules" / "own.md").exists()
+
+    unique_too = machine.run(machine.write_registry(), "migrate", "--apply", "--accept-unique")
+
+    assert unique_too.returncode == 0, unique_too.stdout
+    assert not (path / ".omp" / "rules" / "own.md").exists()
+
+
+def test_migrate_report_does_not_count_kept_files_as_accepted(machine: Machine) -> None:
+    """--keep сильнее --accept: сохранённый файл не попадает в «принято к снятию»."""
+    path = machine.project("legacy", [("ontoship@sot-omp-marketplace", "project", "0.4.0")],
+                           flat=[".omp/rules"])
+    machine.package_file("ontoship@sot-omp-marketplace", "0.4.0", "rules/kb-first.md", "package text")
+    (path / ".omp" / "rules" / "own.md").write_text("своё", encoding="utf-8")
+    machine.consumer("legacy", path, [("ontoship@sot-omp-marketplace", "project", "0.4.0")],
+                     flat=[".omp/rules"])
+
+    result = machine.run(machine.write_registry(), "migrate", "--accept-unique",
+                         "--keep", ".omp/rules/own.md")
+
+    assert result.returncode == 0, result.stdout
+    assert "принято к снятию" not in result.stdout, "единственный unique-файл сохранён — счёт пуст"
+
+
 def test_verify_skips_consumers_without_ontoship(machine: Machine) -> None:
     path = machine.project("bare")
     machine.consumer("bare", path, [])
@@ -527,7 +633,8 @@ def test_verify_fails_when_deploy_check_fails(machine: Machine) -> None:
     machine.package_file("ontoship@sot-omp-marketplace", "0.4.0", "skills/kb-search/gitmark.py",
                          "import sys\nprint('ok')\n")
     machine.package_file("ontoship@sot-omp-marketplace", "0.4.0", "scripts/deploy-check.sh",
-                         "#!/usr/bin/env bash\necho '[FAIL] нет AGENTS.md'\nexit 1\n")
+                         "#!/usr/bin/env bash\necho '[FAIL] нет AGENTS.md'\n"
+                         "echo 'deploy-check: exit=1'\nexit 1\n")
     machine.consumer("broken", path, [("ontoship@sot-omp-marketplace", "project", "0.4.0")])
 
     result = machine.run(machine.write_registry(), "verify")

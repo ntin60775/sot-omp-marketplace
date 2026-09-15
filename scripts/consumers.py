@@ -192,7 +192,9 @@ def observe(project: Path) -> dict:
     installs = bool(hook.is_file() and INSTALL_STEP.search(hook.read_text(encoding="utf-8", errors="replace")))
     return {
         "plugins": plugins,
-        "flat": [d for d in FLAT_DIRS if (project / d).is_dir()],
+        # Пустой каталог — не копия пакета: он ничего не перекрывает.
+        "flat": [d for d in FLAT_DIRS
+                 if (project / d).is_dir() and any(path.is_file() for path in (project / d).rglob("*"))],
         "worktree": {"hook": WORKTREE_HOOK if hook.is_file() else None, "installsPlugins": installs},
     }
 
@@ -627,12 +629,20 @@ def cmd_verify(registry: dict, args) -> int:
             ("version", [sys.executable, str(engine), "version"]),
         ):
             if not Path(cmd[1]).exists():
-                checks.append({"check": label, "ok": False, "out": "нет файла: " + cmd[1]})
+                checks.append({"check": label, "ok": False, "warn": False, "out": "нет файла: " + cmd[1]})
                 continue
             result = _run(cmd, cwd=project)
             output = (result.stdout or result.stderr).strip()
-            checks.append({"check": label, "ok": result.returncode == 0,
-                           "out": output.splitlines()[-1] if output else ""})
+            lines = [line for line in output.splitlines() if line.strip()]
+            # Причина важнее строки-итога: deploy-check завершает вывод «deploy-check: exit=N».
+            marked = [line for line in lines if line.startswith(("[WARN]", "[FAIL]"))]
+            detail = " · ".join(marked[-3:]) if marked else (lines[-1] if lines else "")
+            # deploy-check: 0 — чисто, 1 — критика, 2 — предупреждения (пакет работает).
+            if label == "deploy-check":
+                ok, warn = result.returncode in (0, 2), result.returncode == 2
+            else:
+                ok, warn = result.returncode == 0, False
+            checks.append({"check": label, "ok": ok, "warn": warn, "out": detail})
         ok = all(c["ok"] for c in checks)
         failed += 0 if ok else 1
         results.append({"name": consumer["name"], "checks": checks})
@@ -647,10 +657,14 @@ def cmd_verify(registry: dict, args) -> int:
             if "skipped" in row:
                 print(f"  • {row['name']:<22} {row['skipped']}")
                 continue
-            summary = " ".join(f"{c['check']}:{'✓' if c['ok'] else '✗'}" for c in row["checks"])
-            print(f"  {'✓' if all(c['ok'] for c in row['checks']) else '✗'} {row['name']:<22} {summary}")
+            marks = {"ok": "✓", "warn": "⚠", "fail": "✗"}
+            summary = " ".join(
+                f"{c['check']}:{marks['warn' if c.get('warn') else 'ok' if c['ok'] else 'fail']}"
+                for c in row["checks"])
+            worst = "✗" if not all(c["ok"] for c in row["checks"]) else ("⚠" if any(c.get("warn") for c in row["checks"]) else "✓")
+            print(f"  {worst} {row['name']:<22} {summary}")
             for check in row["checks"]:
-                if not check["ok"]:
+                if not check["ok"] or check.get("warn"):
                     print(f"      {check['check']}: {check['out']}")
     return EXIT_DRIFT if failed else EXIT_OK
 
@@ -728,6 +742,10 @@ def cmd_migrate(registry: dict, args) -> int:
     errors: list[dict] = []
     refused = 0
     consumed_absolute: set[str] = set()
+    # Расходящиеся и отсутствующие в пакетах файлы снимаются только по явному решению
+    # оператора: без флага они блокируют снятие целиком.
+    accepted = {kind for kind, flag in (("divergent", args.accept_divergent),
+                                        ("unique", args.accept_unique)) if flag}
 
     for consumer in consumers:
         project = Path(consumer["path"])
@@ -745,9 +763,11 @@ def cmd_migrate(registry: dict, args) -> int:
         classification, reference = _classify(project, observed)
         blockers = [row["path"] for rows in classification.values() for row in rows
                     if row["kind"] in ("divergent", "unique", "unverifiable")
+                    and row["kind"] not in accepted
                     and row["path"] not in keep]
         plans.append({"name": consumer["name"], "path": str(project), "flat": classification,
-                      "blockers": blockers, "keep": sorted(keep), "reference": reference})
+                      "blockers": blockers, "keep": sorted(keep), "reference": reference,
+                      "accepted": sorted(accepted)})
 
     unknown_keep = [raw for raw in args.keep or []
                     if Path(raw).is_absolute() and str(Path(raw)) not in consumed_absolute]
@@ -768,6 +788,16 @@ def cmd_migrate(registry: dict, args) -> int:
                     counts[row["kind"]] += 1
                 print(f"      {flat:<16} совпадает {counts['identical']} · "
                       f"расходится {counts['divergent']} · нет в пакетах {counts['unique']}")
+            if plan["accepted"]:
+                kept = set(plan["keep"])
+                taken = {"divergent": 0, "unique": 0}
+                for row in plan["flat"].values():
+                    for item in row:
+                        if item["kind"] in plan["accepted"] and item["path"] not in kept:
+                            taken[item["kind"]] += 1
+                parts = [f"{kind} {count}" for kind, count in taken.items() if count]
+                if parts:
+                    print(f"      принято к снятию решением оператора: {', '.join(parts)}")
             if not plan["reference"]:
                 print("      эталон недоступен: плагины не поставлены — сначала upgrade --yes")
                 continue
@@ -782,7 +812,7 @@ def cmd_migrate(registry: dict, args) -> int:
             if len(pending) > 10:
                 print(f"      … ещё {len(pending) - 10} (полный список: migrate --json)")
         print("\nЭто отчёт. Применение — migrate --apply (файлы, требующие решения, блокируют его; "
-              "сохранить их можно через --keep).")
+              "сохранить их можно через --keep, снять осознанно — через --accept-divergent/--accept-unique).")
         return EXIT_DRIFT if errors else EXIT_OK
 
     results = []
@@ -799,7 +829,8 @@ def cmd_migrate(registry: dict, args) -> int:
                 for item in blocked:
                     counts[item["kind"]] += 1
                 reason = (f"{len(blocked)} файлов требуют решения: "
-                          f"расходится с пакетом {counts['divergent']} · нет в пакетах {counts['unique']}")
+                          f"расходится с пакетом {counts['divergent']} · нет в пакетах {counts['unique']} "
+                          f"(снять осознанно: --accept-divergent / --accept-unique)")
             results.append({"name": plan["name"], "applied": False, "removed": 0, "reason": reason})
             if not args.json:
                 print(f"  ✗ {plan['name']}: снятие отклонено — {reason}")
@@ -871,6 +902,10 @@ def build_parser() -> argparse.ArgumentParser:
     migrate.add_argument("--only", action="append")
     migrate.add_argument("--apply", action="store_true", help="применить (по умолчанию — отчёт)")
     migrate.add_argument("--keep", action="append", help="путь, который остаётся в проекте")
+    migrate.add_argument("--accept-divergent", action="store_true",
+                         help="снять и файлы, отличающиеся от пакетных (осознанное решение оператора)")
+    migrate.add_argument("--accept-unique", action="store_true",
+                         help="снять и файлы, которых нет ни в одном пакете (осознанное решение оператора)")
 
     return parser
 

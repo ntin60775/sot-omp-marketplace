@@ -117,7 +117,7 @@ python3 scripts/consumers.py scan     [--json]          # обновить на�
 python3 scripts/consumers.py check    [--refresh] [--only NAME] [--json]
 python3 scripts/consumers.py upgrade  [--only NAME] [--dry-run] [--yes] [--json]
 python3 scripts/consumers.py verify   [--only NAME] [--json]   # gitmark index + deploy-check.sh + gitmark version
-python3 scripts/consumers.py migrate  [--only NAME] [--apply] [--keep PATH] [--json]   # снос плоских копий
+python3 scripts/consumers.py migrate  [--only NAME] [--apply] [--keep PATH] [--accept-divergent] [--accept-unique] [--json]   # снос плоских копий
 ```
 
 - Коды выхода: `0` — чисто; `1` — найден дрейф, недоступный потребитель или провал
@@ -141,6 +141,18 @@ python3 scripts/consumers.py migrate  [--only NAME] [--apply] [--keep PATH] [--j
   нет), `unverifiable` (пакетов нет вовсе — сравнивать не с чем). `--apply` снимает
   потребителя только когда `divergent`/`unique`/`unverifiable` пусто или закрыто
   `--keep`; `--keep` принимает и относительный путь, и абсолютный внутри проекта.
+- **Расходящиеся и отсутствующие в пакетах файлы снимаются только по решению
+  оператора**: `--accept-divergent` и `--accept-unique` — раздельные решения (принять
+  старую генерацию пакета ≠ принять файл, которого в пакете нет). Без них такие файлы
+  блокируют снятие целиком, а в отчёте видно, что именно блокирует. `unverifiable`
+  не принимается никогда: без поставленных пакетов сравнивать не с чем — сначала
+  `upgrade`.
+- Плоской копией считается каталог `.omp/{skills,rules,commands,scripts}` **с хотя бы
+  одним файлом**: пустой каталог ничего не перекрывает и дрейфом не считается.
+- `verify` различает уровень проверки: `gitmark index` и `version` — 0 или провал;
+  `deploy-check.sh` — 0 чисто, 1 критика (провал), **2 предупреждения** (пакет
+  работает: так `deploy-check` и документирован в шапке скрипта). В отчёте
+  предупреждение помечается `⚠`, код выхода при нём остаётся `0`.
 - `scan --json` печатает реестр с обновлённым наблюдаемым, но **не пишет** файл: так
   удобно сравнить до и после, не трогая реестр.
 - **Свой dry-run, а не флаг omp.** `omp plugin upgrade --dry-run` флаг игнорирует и
