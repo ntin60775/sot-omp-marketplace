@@ -345,10 +345,12 @@ def test_upgrade_installs_over_flat_copies_and_points_at_migrate(machine: Machin
     """Копии установке не мешают (они перекрывают плагин, поведение не меняется),
     но оператор обязан увидеть, что дальше нужен migrate."""
     pinned = machine.project("pinned", [("ontoship@sot-omp-marketplace", "project", "0.3.0")])
-    legacy = machine.project("legacy", flat=[".omp/rules"])
+    legacy = machine.project("legacy", [("ontoship@sot-omp-marketplace", "project", "0.3.0")],
+                             flat=[".omp/rules"])
+    machine.package_file("ontoship@sot-omp-marketplace", "0.3.0", "rules/kb-first.md", "пакет")
     (legacy / ".omp" / "rules" / "kb-first.md").write_text("старая копия", encoding="utf-8")
     machine.consumer("pinned", pinned, [("ontoship@sot-omp-marketplace", "project", "0.3.0")])
-    machine.consumer("legacy", legacy, [("ontoship@sot-omp-marketplace", "project", None)],
+    machine.consumer("legacy", legacy, [("ontoship@sot-omp-marketplace", "project", "0.3.0")],
                      flat=[".omp/rules"])
     machine.consumers[0]["plugins"][0]["pin"] = "0.3.0"
 
@@ -356,9 +358,25 @@ def test_upgrade_installs_over_flat_copies_and_points_at_migrate(machine: Machin
 
     mutations = machine.mutations()
     assert not any("pinned|" in call for call in mutations), "закреплённого обновлять нельзя"
-    assert any("legacy|plugin install ontoship@sot-omp-marketplace" in call for call in mutations)
+    assert any("legacy|plugin upgrade ontoship@sot-omp-marketplace" in call for call in mutations)
     assert "плоские копии на месте у: legacy" in result.stdout
     assert "migrate --apply" in result.stdout
+
+
+def test_upgrade_does_not_warn_about_project_own_files(machine: Machine) -> None:
+    """Свои файлы проекта ничего не перекрывают — предупреждения о копиях быть не должно."""
+    path = machine.project("own", [("ontoship@sot-omp-marketplace", "project", "0.3.0")],
+                           flat=[".omp/rules"])
+    machine.package_file("ontoship@sot-omp-marketplace", "0.3.0", "rules/kb-first.md", "пакет")
+    (path / ".omp" / "rules" / "erp-main-test-contour.md").write_text("своё правило", encoding="utf-8")
+    machine.consumer("own", path, [("ontoship@sot-omp-marketplace", "project", "0.3.0")],
+                     flat=[".omp/rules"])
+
+    result = machine.run(machine.write_registry(), "upgrade", "--yes")
+
+    assert result.returncode == 0, result.stdout
+    assert "плоские копии на месте" not in result.stdout
+    assert "ontoship@sot-omp-marketplace" in result.stdout, "обновление всё равно сделано"
 
 
 def test_migrate_report_deletes_nothing(machine: Machine) -> None:

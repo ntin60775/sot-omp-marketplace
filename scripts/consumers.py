@@ -605,7 +605,9 @@ def _upgrade_plan(registry: dict, args) -> tuple[list[dict], list[dict]]:
             # Плоские копии установке не мешают: копия перекрывает плагин (нативный
             # провайдер), поведение проекта не меняется, пока копии на месте. Зато
             # поставленный пакет даёт migrate эталон для классификации файлов.
-            over_copies = bool(observed["flat"])
+            # Признак — именно перекрывающие копии: свои файлы проекта под неплагинными
+            # именами ничего не перекрывают, и предупреждать о них нечего.
+            over_copies = bool(observed["shadowing"])
             if installed is None:
                 actions.append({"name": consumer["name"], "path": str(project), "plugin": plugin_id,
                                 "action": "install", "from": None, "to": wanted[plugin_id],
