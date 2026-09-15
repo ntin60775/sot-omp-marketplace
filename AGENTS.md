@@ -37,10 +37,10 @@ Supersedes the 2026-08-30 decision. Full record:
   HTTPS, which cannot authenticate against a private repo.
 - Plugins install **per project** (`--scope project`). Worktrees do not inherit
   `.omp/plugins/`, so a project's `tasks/init-worktree.sh` must install them.
-- The marketplace repo dogfoods its own plugin: `.omp/` here is an install
-  (`omp plugin install --scope project ontoship@sot-omp-marketplace`), not a
-  package source. The old `plugins/` and `scripts/sync-package.sh` were removed
-  in `8b0a1c1`.
+- The marketplace repo dogfoods its own plugin: `.omp/` here is created by the
+  bootstrap step (`omp plugin install --scope project ontoship@sot-omp-marketplace`)
+  and is absent in a fresh clone — it is an install, not a package source. The old
+  `plugins/` and `scripts/sync-package.sh` were removed in `8b0a1c1`.
 - **Consumers are tracked locally**: `.consumers.json` (gitignored) lists every
   project on this machine that consumes the catalog, with observed versions and
   flat copies — [docs/reference/consumer-registry.md](docs/reference/consumer-registry.md).
@@ -61,15 +61,9 @@ Same as OntoShip's: markdown + git is the source of truth; everything derived
 
 ## First clone (bootstrap)
 
-Корневой `.omp/` не в git: он собирается **установкой плагина**, а не скриптом.
-После свежего клона:
-
-```bash
-omp plugin install --scope project ontoship@sot-omp-marketplace
-G=.omp/plugins/node_modules/ontoship/skills/kb-search/gitmark.py
-python3 "$G" index
-python3 -m pytest tests/
-```
+Канон — [docs/ops/bootstrap-after-clone.md](docs/ops/bootstrap-after-clone.md):
+маркетплейс раз на машине (`omp plugin marketplace add ntin60775/sot-omp-marketplace`),
+установка плагина в проект, проверка, KB-индекс, реестр потребителей.
 
 `gitmark` приходит из плагина. Собственной копии в репозитории нет намеренно:
 вторая копия одного инструмента — ровно тот дрейф, от которого мы уходим.

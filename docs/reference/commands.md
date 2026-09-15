@@ -3,17 +3,18 @@ node_type: reference
 title: Реестр команд и навыков
 service: _platform
 status: active
-updated: 2026-09-14
+updated: 2026-09-16
 links:
-  relates_to: [gitmark-ontology.md]
+  relates_to: [gitmark-ontology.md, ../ops/bootstrap-after-clone.md]
 ---
 
 # Реестр команд и навыков
 
 Этот репозиторий — каталог и KB. Собственного omp-пакета он не несёт: команды и
 навыки живут в репозиториях плагинов — `1c-omp` и `ontoship-omp`, и подключаются
-из каталога по тегам. Плагин `ontoship` установлен в этом проекте (project-scope),
-поэтому реестр ниже заполнен его payload.
+из каталога по тегам. В свежем клоне плагина здесь нет: он появляется шагом
+bootstrap ([KB после свежего клона](../ops/bootstrap-after-clone.md)). Таблицы ниже —
+payload `ontoship` 0.4.3, собранный `gitmark inventory` при установленном плагине.
 
 Таблицы генерируются `gitmark inventory` из установленного payload: сканируются
 команды и навыки двух слоёв — проект (`<проект>/.omp/commands`,

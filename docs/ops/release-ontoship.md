@@ -3,7 +3,7 @@ node_type: runbook
 title: Релиз плагина
 service: _platform
 status: active
-updated: 2026-09-15
+updated: 2026-09-16
 links:
   documents: [../../.omp-plugin/marketplace.json]
   relates_to: [../decisions/plugin-delivery.md]
@@ -32,9 +32,18 @@ links:
    опознаваем в репозитории плагина, запись каталога — чтобы потребители получили
    новую версию.
 
-2. **В каталоге** — `.omp-plugin/marketplace.json`: bump `version` и `ref` записи.
+2. **Проверка тега**: тег должен существовать в репозитории плагина — иначе установка
+   потребителя упадёт ошибкой клона:
 
-3. **Потребители**:
+   ```bash
+   git ls-remote git@github.com:ntin60775/ontoship-omp.git refs/tags/vX.Y.Z
+   ```
+
+   Пустой вывод — тег не запушен, релиз не начинать.
+
+3. **В каталоге** — `.omp-plugin/marketplace.json`: bump `version` и `ref` записи.
+
+4. **Потребители**:
 
    ```bash
    omp plugin marketplace update sot-omp-marketplace
@@ -50,6 +59,10 @@ links:
    > становится виден во всех проектах машины. Проекты, которые пинят плагин
    > per-project, обязаны передавать `--scope=project`; иначе вместо проектной
    > установки молча появится машинная (и будет тенить/путать версии).
+   >
+   > `--dry-run` у omp не работает ни для `install`, ни для `upgrade`: флаг
+   > игнорируется, установка/обновление выполняется по-настоящему (проверено
+   > 2026-09-14: `erp-demo`, `1c` 0.1.1 → 0.1.2 при `--dry-run`).
 
 ## Почему источник — отдельный репозиторий с тегом
 
@@ -63,3 +76,7 @@ links:
 Источник — SSH-URL: установщик клонирует по HTTPS и на приватном репозитории
 получает `Repository not found. Authentication failed`, если не настроен
 credential helper.
+
+То же правило действует и для **каталога**: форма `owner/repo` разворачивается в
+`https://github.com/…`, поэтому приватный каталог подключается SSH-формой —
+[источник каталога](../reference/marketplace-catalog.md).

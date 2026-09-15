@@ -3,7 +3,7 @@ node_type: index
 title: sot-omp-marketplace — KB
 service: _platform
 status: active
-updated: 2026-09-14
+updated: 2026-09-16
 ---
 
 # Knowledge base

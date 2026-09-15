@@ -3,11 +3,11 @@ node_type: runbook
 title: Обновление потребителей каталога — реестр, раздача, снятие плоских копий
 service: _platform
 status: active
-updated: 2026-09-14
+updated: 2026-09-16
 links:
   documents: [../../scripts/consumers.py, ../../.consumers.json]
   depends_on: [../reference/consumer-registry.md, release-ontoship.md]
-  relates_to: [../plans/consumer-delivery.md, ../decisions/plugin-delivery.md]
+  relates_to: [../plans/consumer-delivery.md, ../decisions/plugin-delivery.md, bootstrap-after-clone.md]
 ---
 
 # Обновление потребителей каталога
@@ -15,6 +15,23 @@ links:
 Кого обновлять и что у них стоит — реестр потребителей (`.consumers.json`) и инструмент
 `scripts/consumers.py`. Формат, виды дрейфа и коды выхода —
 [реестр потребителей](../reference/consumer-registry.md). Здесь — порядок действий.
+
+## 0. Реестра нет (новая машина, свежий клон)
+
+`.consumers.json` — машинный файл (в `.gitignore`); в свежем клоне его нет, и
+`check`/`discover` падают с exit 2 «реестр не найден». Восстановление:
+
+```bash
+python3 scripts/consumers.py init --root <каталоги-корни>   # создаёт реестр; отказывается, если он уже есть
+python3 scripts/consumers.py discover                       # отчёт: кандидаты (каталоги с .omp/) и наблюдаемое
+python3 scripts/consumers.py discover --apply               # принимает кандидатов в consumers[]
+python3 scripts/consumers.py check                          # дальше — обычный порядок
+```
+
+Кандидаты, которые не потребители (репозитории-источники плагинов, машинный слой),
+уходят в `exclude` (`--exclude PATH` — только с `--apply`; без `--apply` — ошибка
+использования). Контракт и почему `init` не принимает кандидатов сам —
+[реестр потребителей](../reference/consumer-registry.md).
 
 ## 1. Релиз плагина
 
@@ -80,7 +97,22 @@ git mv .omp/rules/test-contour.md .omp/rules/erp-main-test-contour.md   # при
 `unverifiable` не принимается никогда: без поставленных пакетов сравнивать не с чем —
 сначала `upgrade`. `--keep` сильнее любого `--accept*`: названное остаётся.
 
-## 5. Частые отказы
+## 5. Проект перестаёт быть потребителем
+
+`omp plugin uninstall` **не сносит** `.omp/`: остаётся скелет
+`.omp/plugins/{installed_plugins.json, omp-plugins.lock.json, node_modules}`.
+Наличие `.omp/` — сентинель потребителя для инструмента, поэтому порядок:
+
+1. `omp plugin uninstall <plugin>@<marketplace> --scope=project`;
+2. снести `.omp/` целиком (скелет — не знание проекта, его не жалеть);
+3. убрать проект из `consumers` в реестре (или в `exclude`, если он не должен
+   появляться как кандидат).
+
+Если проект **остаётся** потребителем (снят только один плагин) — скелет
+безвреден: `.omp/plugins/` игнорируется, а наблюдаемое состояние обновится при
+следующем `scan`/`check`.
+
+## 6. Частые отказы
 
 | Симптом | Причина | Что делать |
 |---|---|---|
@@ -95,9 +127,15 @@ git mv .omp/rules/test-contour.md .omp/rules/erp-main-test-contour.md   # при
 | дрейф `stale` при заданном `pin` | пин нарушен — стоит не та версия | разобраться, почему: пин или установка |
 | ворктри без плагинов | `tasks/init-worktree.sh` их не ставит (`worktree-gap`) | добавить шаг установки в скрипт проекта |
 | `не в реестре (кандидаты)` | проект с `.omp/` не описан | добавить в `consumers` или в `exclude` |
+| дрейф `gitignore` | доставленное не игнорируется — попадёт в git | дополнить `.gitignore` каноническим блоком из [consumer-repo-layout](../reference/consumer-repo-layout.md); `upgrade` по нему ничего не делает |
+| `реестр не найден` (exit 2) | свежий клон / новая машина — `.consumers.json` отсутствует | `init` + `discover --apply` (шаг 0) |
 
 ## Ловушка: `--dry-run` у omp не dry-run
 
-`omp plugin upgrade --dry-run` флаг **игнорирует** и выполняет обновление (проверено
-2026-09-14: `erp-demo`, плагин `1c` 0.1.1 → 0.1.2 при `--dry-run`). План без изменений
-даёт только `consumers.py upgrade --dry-run`: он не вызывает `omp` вовсе.
+`omp plugin install --dry-run` и `omp plugin upgrade --dry-run` флаг **игнорируют** и
+ставят/обновляют по-настоящему: флаг разбирается в `flags.dryRun`, но обработчик
+установки его не читает. Проверено дважды — 2026-09-14 на `upgrade` (`erp-demo`,
+плагин `1c` 0.1.1 → 0.1.2 при `--dry-run`) и 2026-09-16 на `install` (omp v18.2.0:
+`omp plugin install --scope project --dry-run ontoship@sot-omp-marketplace` создал
+`.omp/plugins/installed_plugins.json` и поставил плагин). План без изменений даёт
+только `consumers.py upgrade --dry-run`: он не вызывает `omp` вовсе.

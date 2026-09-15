@@ -20,6 +20,9 @@
 
 ## Установка
 
+Полная последовательность свежего клона — [bootstrap-ранбук](docs/ops/bootstrap-after-clone.md)
+(он же канон: этот раздел не дублирует команды, а описывает машинный уровень).
+
 ```bash
 # раз на машине
 omp plugin marketplace add IngvarConsulting/unica-marketplace
@@ -36,6 +39,10 @@ omp plugin install --scope project ontoship@sot-omp-marketplace
 Установка **в проект**, а не в машину: у контура есть проектный контекст (база,
 учётка, состав расширений) и своя версия. Цена решения — ворктри не наследуют
 `.omp/plugins/`, поэтому в проекте нужен шаг установки в `tasks/init-worktree.sh`.
+
+После установки — реестр потребителей: `python3 scripts/consumers.py init` +
+`discover --apply` (каталоги с `.omp/` на машине) —
+[реестр потребителей](docs/reference/consumer-registry.md).
 
 Обновление: `omp plugin marketplace update sot-omp-marketplace && omp plugin upgrade <plugin>@sot-omp-marketplace --scope=project`.
 Без `--scope` upgrade ставит плагин в user-scope — машинно, во все проекты.

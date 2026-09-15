@@ -3,10 +3,10 @@ node_type: reference
 title: Контракт каталога omp-маркетплейса
 service: _platform
 status: active
-updated: 2026-09-15
+updated: 2026-09-16
 links:
   documents: [../../.omp-plugin/marketplace.json, ../../README.md]
-  relates_to: [../plans/consumer-delivery.md, consumer-registry.md, ontoship-package.md]
+  relates_to: [../plans/consumer-delivery.md, ../ops/bootstrap-after-clone.md, consumer-registry.md, ontoship-package.md]
 ---
 
 # Контракт каталога маркетплейса
@@ -51,7 +51,41 @@ v0.4.3 (git-subdir, `path: ".omp"`, `ref: "v0.4.3"`) и `1c` v0.1.2 (url,
 [marketplace-delivery](../plans/marketplace-delivery/README.md) архивирован и не
 исполняется.
 
+## Источник каталога
+
+`omp plugin marketplace add <источник>` различает формы по виду строки:
+
+| Форма | Как `omp` её читает | `sourceType` | Когда |
+|---|---|---|---|
+| `owner/repo` | `https://github.com/owner/repo.git` | `github` | каталог публичный — рабочая форма этого репозитория |
+| `git@github.com:owner/repo.git` | клон по SSH | `git` | каталог приватный: HTTPS не аутентифицируется |
+| `./путь`, `~/путь`, абсолютный | локальный каталог | `local` | отладка каталога без публикации |
+
+Независимо от формы `omp` кладёт **копию разобранного каталога** в
+`~/.omp/plugins/cache/marketplaces/<имя>/marketplace.json` и записывает этот путь
+в `~/.omp/marketplaces.json` как `catalogPath`. Дальше читается именно кэш: правка
+каталога доезжает до потребителей только через `omp plugin marketplace update <имя>`.
+
+Повторный `add` с тем же **именем каталога** отвергается (`Marketplace "<имя>"
+already exists`) — даже если источник другой. Уже зарегистрированный маркетплейс
+меняют через `update`, а не повторным `add`.
+
+## Имя каталога — контракт
+
+Имя маркетплейса — поле `name` каталога, не имя репозитория: репозиторий
+`IngvarConsulting/unica-marketplace` регистрируется как `unica`. Имя входит в
+селектор установки `<плагин>@<имя>`, поэтому переименование `name` ломает команды
+всех потребителей разом: `omp plugin marketplace update` падает с `Marketplace
+catalog name changed from "<старое>" to "<новое>". Remove and re-add the marketplace
+to update.` Схема реестра потребителей фиксирует имя константой (`catalog.name`),
+поэтому расхождение каталога и схемы видно и без живого `omp`.
+
 ## Авторитет версии
+
+`metadata.version` — **информационное** поле: валидатор каталога в `omp` проверяет
+только `name`, `owner.name` и `plugins[]`, а версию для `upgrade` берёт из записи
+плагина. Каталожная версия нужна людям и KB — по ней видно, каким релизом живёт
+каталог.
 
 Для `omp plugin upgrade` авторитетна **версия в каталоге** `marketplace.json` —
 `package.json` плагина при upgrade не читается (проверено экспериментом на живом
@@ -86,6 +120,9 @@ cd <project> && omp plugin install --scope project ontoship@sot-omp-marketplace
 omp plugin marketplace update sot-omp-marketplace && omp plugin upgrade ontoship@sot-omp-marketplace --scope=project
 ```
 
+Свежий клон этого репозитория и реестр потребителей на новой машине — отдельный
+порядок: [bootstrap после клона](../ops/bootstrap-after-clone.md).
+
 ## Семантика scope и кэш
 
 - **user-scope** — плагин виден во всех проектах машины;
@@ -104,8 +141,10 @@ omp plugin marketplace update sot-omp-marketplace && omp plugin upgrade ontoship
 
 1. Изменения в репозитории плагина (разработка — по dev-flow).
 2. Тег в репозитории плагина, push.
-3. Bump `version` и `ref` записи в `.omp-plugin/marketplace.json`.
-4. Потребители: `marketplace update` + `plugin upgrade`.
+3. Проверка, что тег доехал до origin: `git ls-remote <url плагина> refs/tags/<ref>`.
+   Пусто — релиз не состоялся, и запись каталога ссылалась бы в пустоту.
+4. Bump `version` и `ref` записи в `.omp-plugin/marketplace.json`.
+5. Потребители: `marketplace update` + `plugin upgrade`.
 
 Runbook с шагами проверки — [docs/ops/release-ontoship.md](../ops/release-ontoship.md);
 анатомия самого пакета — [ontoship-package.md](ontoship-package.md).
