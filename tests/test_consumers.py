@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -14,7 +15,25 @@ from pathlib import Path
 import pytest
 
 TOOL = Path(__file__).resolve().parent.parent / "scripts" / "consumers.py"
+REPO = Path(__file__).resolve().parent.parent
 CATALOG = "sot-omp-marketplace"
+LAYOUT_DOC = REPO / "docs" / "reference" / "consumer-repo-layout.md"
+
+
+def documented_ignores() -> list[str]:
+    """Канонический блок `.gitignore` — из документа, а не из копии в тесте.
+
+    Инструмент держит тот же набор константой; тест `test_check_lists_the_documented_ignores`
+    сверяет их, поэтому политика и код не могут разъехаться молча.
+    """
+    doc = LAYOUT_DOC.read_text(encoding="utf-8")
+    block = re.search(r"```gitignore\n(.*?)```", doc, re.S)
+    assert block, f"в {LAYOUT_DOC.name} пропал блок ```gitignore с канонической политикой"
+    return [line.strip() for line in block.group(1).splitlines()
+            if line.strip() and not line.strip().startswith("#")]
+
+
+DOCUMENTED_IGNORES = documented_ignores()
 
 FAKE_OMP = """#!/usr/bin/env bash
 echo "$(pwd)|$*" >> "${FAKE_OMP_LOG}"
@@ -77,10 +96,17 @@ class Machine:
     # --- построение мира ---------------------------------------------------
 
     def project(self, name: str, plugins: list[tuple[str, str, str]] = (), flat: list[str] = (),
-                hook: str | None = None) -> Path:
-        """plugins: (id, scope, version); flat: каталоги вроде .omp/rules; hook: текст скрипта ворктри."""
+                hook: str | None = None, gitignore: str | None = None) -> Path:
+        """plugins: (id, scope, version); flat: каталоги вроде .omp/rules; hook: текст скрипта ворктри.
+
+        `.gitignore` по умолчанию — канонический блок из документа: потребитель без
+        него уже дрейфует, и это проверяет отдельный тест, а не каждый.
+        """
         path = self.root / name
         (path / ".omp").mkdir(parents=True)
+        (path / ".gitignore").write_text(
+            gitignore if gitignore is not None else "\n".join(DOCUMENTED_IGNORES) + "\n",
+            encoding="utf-8")
         for directory in flat:
             (path / directory).mkdir(parents=True, exist_ok=True)
         if hook is not None:
@@ -948,3 +974,223 @@ def test_foreign_catalog_versions_are_read(machine: Machine) -> None:
     drift = json.loads(result.stdout)["consumers"][0]["drifts"][0]
     assert drift["kind"] == "stale"
     assert "0.12.3" in drift["detail"], "версия берётся из каталога unica, а не из своего"
+
+
+# ----------------------------------------------- реестр на новой машине: init + discover
+
+
+def test_init_creates_a_registry_that_passes_the_schema(machine: Machine) -> None:
+    """Свежий клон: реестра нет — его заводит init, и он сразу годен для остальных команд."""
+    machine.project("alpha")
+    fresh = machine.root / "fresh.json"
+
+    result = machine.run(fresh, "init", "--root", str(machine.root))
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    doc = json.loads(fresh.read_text(encoding="utf-8"))
+    assert doc["schemaVersion"] == 1
+    assert doc["catalog"]["name"] == CATALOG, "имя каталога — из .omp-plugin/marketplace.json"
+    assert doc["discoverRoots"] == [str(machine.root.resolve())]
+    assert doc["machine"], "машина записана: реестр описывает одну машину"
+    assert doc["consumers"] == [], "список наполняет наблюдение, а не init"
+
+
+def test_init_refuses_to_overwrite_an_existing_registry(machine: Machine) -> None:
+    registry = machine.write_registry()
+    before = registry.read_text(encoding="utf-8")
+
+    result = machine.run(registry, "init", "--root", str(machine.root))
+
+    assert result.returncode == 2
+    assert "уже есть" in result.stderr
+    assert registry.read_text(encoding="utf-8") == before, "существующий реестр не трогается"
+
+
+def test_init_without_a_root_is_a_usage_error(machine: Machine) -> None:
+    """Корни поиска — знание оператора: угадывать их молча нельзя."""
+    fresh = machine.root / "fresh.json"
+
+    result = machine.run(fresh, "init")
+
+    assert result.returncode == 2
+    assert "--root" in result.stderr
+    assert not fresh.exists(), "на ошибке реестр не создаётся"
+
+
+def test_init_reports_a_missing_target_directory(machine: Machine) -> None:
+    """Трейсбек вместо ошибки использования — худшее первое впечатление от bootstrap."""
+    result = machine.run(machine.root / "missing" / "fresh.json", "init", "--root", str(machine.root))
+
+    assert result.returncode == 2
+    assert "каталога для реестра нет" in result.stderr
+
+
+def test_missing_registry_points_at_init(machine: Machine) -> None:
+    """Без реестра инструмент не молчит: он называет команду, которая его заводит."""
+    result = machine.run(machine.root / "absent.json", "check")
+
+    assert result.returncode == 2
+    assert "реестр не найден" in result.stderr
+    assert "init --root" in result.stderr
+
+
+def test_discover_apply_adopts_candidates_with_observed_state(machine: Machine) -> None:
+    alpha = machine.project("alpha", [("ontoship@sot-omp-marketplace", "project", "0.4.0")])
+    machine.project("beta")
+    fresh = machine.root / "fresh.json"
+    machine.run(fresh, "init", "--root", str(machine.root))
+
+    result = machine.run(fresh, "discover", "--apply")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    adopted = {c["name"]: c for c in json.loads(fresh.read_text(encoding="utf-8"))["consumers"]}
+    assert set(adopted) == {"alpha", "beta"}
+    assert adopted["alpha"]["path"] == str(alpha.resolve())
+    assert adopted["alpha"]["plugins"] == [{"id": "ontoship@sot-omp-marketplace",
+                                            "scope": "project", "installed": "0.4.0", "pin": None}]
+    assert adopted["beta"]["plugins"] == [], "проект без плагинов — тоже потребитель"
+
+    check = machine.run(fresh, "check")
+    assert check.returncode == 0, check.stdout + check.stderr
+
+
+def test_discover_apply_does_not_duplicate_on_a_second_run(machine: Machine) -> None:
+    machine.project("alpha")
+    fresh = machine.root / "fresh.json"
+    machine.run(fresh, "init", "--root", str(machine.root))
+    machine.run(fresh, "discover", "--apply")
+
+    result = machine.run(fresh, "discover", "--apply")
+
+    assert result.returncode == 0
+    consumers = json.loads(fresh.read_text(encoding="utf-8"))["consumers"]
+    assert [c["name"] for c in consumers] == ["alpha"]
+
+
+def test_discover_apply_rejects_a_candidate_whose_name_breaks_the_schema(machine: Machine) -> None:
+    """Имя потребителя — контракт для --only: не подходит под схему — не выдумываем."""
+    machine.project("Bad_Name")
+    fresh = machine.root / "fresh.json"
+    machine.run(fresh, "init", "--root", str(machine.root))
+
+    result = machine.run(fresh, "discover", "--apply")
+
+    assert result.returncode == 1
+    assert "не подходит под схему" in result.stdout
+    assert json.loads(fresh.read_text(encoding="utf-8"))["consumers"] == []
+
+
+def test_discover_apply_skips_a_plugin_package_by_default(machine: Machine) -> None:
+    """`.omp/` с package.json — это пакет плагина, а не установка (ADR §5).
+
+    Источник нельзя принять потребителем молча: он не потребитель. Осознанное
+    исключение — назвать его явно через --only.
+    """
+    package = machine.project("plugin-source")
+    (package / ".omp" / "package.json").write_text('{"name": "ontoship"}', encoding="utf-8")
+    fresh = machine.root / "fresh.json"
+    machine.run(fresh, "init", "--root", str(machine.root))
+
+    result = machine.run(fresh, "discover", "--apply")
+
+    assert result.returncode == 1
+    assert "пакет плагина" in result.stdout
+    assert json.loads(fresh.read_text(encoding="utf-8"))["consumers"] == []
+
+    forced = machine.run(fresh, "discover", "--apply", "--only", "plugin-source")
+
+    assert forced.returncode == 0, forced.stdout + forced.stderr
+    assert [c["name"] for c in json.loads(fresh.read_text(encoding="utf-8"))["consumers"]] \
+        == ["plugin-source"]
+
+
+def test_discover_apply_excludes_a_path_instead_of_adopting_it(machine: Machine) -> None:
+    source = machine.project("source-repo")
+    machine.project("alpha")
+    fresh = machine.root / "fresh.json"
+    machine.run(fresh, "init", "--root", str(machine.root))
+
+    result = machine.run(fresh, "discover", "--apply", "--exclude", str(source))
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    doc = json.loads(fresh.read_text(encoding="utf-8"))
+    assert [c["name"] for c in doc["consumers"]] == ["alpha"]
+    assert doc["exclude"] == [{"path": str(source.resolve())}]
+
+
+def test_discover_apply_only_flags_are_refused_without_apply(machine: Machine) -> None:
+    """`--only`/`--exclude` — модификаторы записи: без --apply это тихий no-op."""
+    machine.project("source-repo")
+    registry = machine.write_registry()
+
+    excluded = machine.run(registry, "discover", "--exclude", str(machine.root / "source-repo"))
+    only = machine.run(registry, "discover", "--only", "source-repo")
+
+    assert excluded.returncode == 2 and "--apply" in excluded.stderr
+    assert only.returncode == 2 and "--apply" in only.stderr
+
+
+def test_adoption_records_the_expected_scope_as_project(machine: Machine) -> None:
+    """Машинную установку принятие не благословляет: check сразу зовёт её дрейфом."""
+    machine.project("wide", [("ontoship@sot-omp-marketplace", "user", "0.4.0")])
+    fresh = machine.root / "fresh.json"
+    machine.run(fresh, "init", "--root", str(machine.root))
+    machine.run(fresh, "discover", "--apply")
+
+    result = machine.run(fresh, "check", "--json")
+
+    drifts = json.loads(result.stdout)["consumers"][0]["drifts"]
+    assert [d["kind"] for d in drifts] == ["scope"]
+    assert "user-scope" in drifts[0]["detail"]
+
+
+# --------------------------------------------------- политика .gitignore у потребителя
+
+
+def test_check_lists_the_documented_ignores(machine: Machine) -> None:
+    """Требуемый набор — ровно канонический блок документа, не своя копия в коде."""
+    path = machine.project("bare", gitignore="")
+    machine.consumer("bare", path, [])
+
+    result = machine.run(machine.write_registry(), "check", "--json")
+
+    assert result.returncode == 1
+    drift = json.loads(result.stdout)["consumers"][0]["drifts"][0]
+    assert drift["kind"] == "gitignore"
+    assert drift["ignores"] == DOCUMENTED_IGNORES
+
+
+def test_wholesale_omp_covers_delivered_but_not_derived(machine: Machine) -> None:
+    """Огульное `.omp/` закрывает доставленное; производное KB — отдельные строки."""
+    path = machine.project("wholesale", gitignore=".omp/\n")
+    machine.consumer("wholesale", path, [])
+
+    result = machine.run(machine.write_registry(), "check", "--json")
+
+    ignores = json.loads(result.stdout)["consumers"][0]["drifts"][0]["ignores"]
+    assert ignores == [line for line in DOCUMENTED_IGNORES if not line.startswith(".omp/")]
+
+
+def test_gitignore_anchored_and_slashless_forms_cover_the_policy(machine: Machine) -> None:
+    """`/.gitmark/` и `.omp/plugins` без хвостового слэша — тот же запрет, что в каноне."""
+    lines = ["/" + line if line == ".gitmark/" else
+             line.rstrip("/") if line == ".omp/plugins/" else line
+             for line in DOCUMENTED_IGNORES]
+    path = machine.project("anchored", gitignore="\n".join(lines) + "\n")
+    machine.consumer("anchored", path, [])
+
+    result = machine.run(machine.write_registry(), "check")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_negation_in_gitignore_brings_delivered_files_back(machine: Machine) -> None:
+    """`!` возвращает путь в git так же, как отсутствие строки."""
+    path = machine.project("negated",
+                           gitignore="\n".join(DOCUMENTED_IGNORES) + "\n!.omp/plugins/\n")
+    machine.consumer("negated", path, [])
+
+    result = machine.run(machine.write_registry(), "check", "--json")
+
+    ignores = json.loads(result.stdout)["consumers"][0]["drifts"][0]["ignores"]
+    assert ignores == [".omp/plugins/"]

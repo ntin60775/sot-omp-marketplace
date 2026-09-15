@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""consumers.py — реестр потребителей каталога: обнаружение, дрейф, обновление, проверка.
+"""consumers.py — реестр потребителей каталога: заведение, обнаружение, дрейф, обновление, проверка.
 
 Данные — `.consumers.json` в корне клона каталога (в .gitignore: в нём абсолютные
 пути и состав конкретной машины), формат — `schemas/consumer-registry.schema.json`,
-семантика и контракт — `docs/reference/consumer-registry.md`.
+семантика и контракт — `docs/reference/consumer-registry.md`. Реестр машино-локален
+и не переносится между машинами: на новой машине его заводит `init`, наполняет
+наблюдением `discover --apply`.
 
 Зависимостей нет: валидатор схемы встроенный (python-модуля `jsonschema` на машине
 может не быть — проверено 2026-09-14).
@@ -16,6 +18,7 @@ import json
 import os
 import re
 import shutil
+import socket
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -31,6 +34,27 @@ WORKTREE_HOOK = "tasks/init-worktree.sh"
 INSTALL_STEP = re.compile(r"omp\s+plugin\s+(?:install|upgrade)")
 SCRIPT_REF = re.compile(r"[\w][\w./-]*\.sh")
 DISCOVER_MAX_DEPTH = 3
+CONSUMER_NAME = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
+REMOTE_RE = re.compile(r"[:/]([^/:]+/[^/]+?)(?:\.git)?$")
+
+# Доставленное и производное не версионируется — политика из
+# docs/reference/consumer-repo-layout.md, блок «Канонический блок для .gitignore».
+# Набор здесь, а не в документе, потому что проверяет его инструмент; тест сверяет
+# эту константу с блоком документа, поэтому расхождение кода и политики — провал.
+REQUIRED_IGNORES = (
+    ".omp/plugins/",
+    ".omp/skills/",
+    ".omp/commands/",
+    ".omp/scripts/",
+    ".omp/RULES.md",
+    ".omp/APPEND_SYSTEM.md",
+    ".omp/mcp.json",
+    ".omp/.backup-*",
+    ".gitmark/",
+    "*-map.html",
+    ".scratch/",
+    ".artifacts/",
+)
 
 EXIT_OK = 0
 EXIT_DRIFT = 1
@@ -43,6 +67,19 @@ class UsageError(Exception):
 
 def utcnow() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def invocation() -> str:
+    """Как повторить запуск инструмента: путь, по возможности относительно cwd.
+
+    Подсказка в ошибке должна быть копируемой: `python3 consumers.py` работает
+    только из корня клона, а сообщение читают и из чужого каталога.
+    """
+    script = Path(__file__).resolve()
+    try:
+        return str(script.relative_to(Path.cwd()))
+    except ValueError:
+        return str(script)
 
 
 def write_json(path: Path, doc: dict) -> None:
@@ -127,7 +164,9 @@ def load_registry(path: Path, schema_path: Path) -> dict:
     try:
         doc = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
-        raise UsageError(f"реестр не найден: {path}") from None
+        raise UsageError(f"реестр не найден: {path}\n"
+                         f"  завести реестр на этой машине: python3 {invocation()} "
+                         f"init --root <каталог с проектами>") from None
     except json.JSONDecodeError as exc:
         raise UsageError(f"реестр не разбирается как JSON: {path}: {exc}") from None
 
@@ -221,6 +260,55 @@ def worktree_hook_state(project: Path, plugins: dict) -> dict:
     return {"hook": WORKTREE_HOOK, "installsPlugins": installs}
 
 
+def _gitignore_patterns(project: Path) -> tuple[list[str], list[str]]:
+    """Шаблоны проекта и то, что он отменяет через `!`: отмена сильнее покрытия."""
+    path = project / ".gitignore"
+    if not path.is_file():
+        return [], []
+    patterns, negations = [], []
+    for raw in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("!"):
+            negations.append(line[1:].strip())
+        else:
+            patterns.append(line)
+    return patterns, negations
+
+
+def _covers(pattern: str, required: str) -> bool:
+    """Шаблон покрывает требуемую строку: точно либо как каталог-префикс.
+
+    `.omp/` покрывает `.omp/plugins/` и `.omp/.backup-*`; `.omp/plugins/` покрывает
+    `.omp/plugins/` и всё под ним. Ведущий `/` (привязка к корню) и хвостовой слэш
+    на смысл не влияют — git читает `.omp/plugins`, `/.omp/plugins/` и `.omp/plugins/`
+    одинаково, — а `.gitignore` из одного `*` игнорирует всё.
+    """
+    base = pattern.lstrip("/").rstrip("/")
+    wanted = required.lstrip("/").rstrip("/")
+    if not base.strip("*"):
+        return True
+    return base == wanted or wanted.startswith(base + "/")
+
+
+def uncovered_ignores(project: Path) -> list[str]:
+    """Требуемые строки `.gitignore`, которые проект не игнорирует.
+
+    Политика — «доставленное не версионируется»: файл, попавший в git, — вторая
+    правда рядом с пакетом. Отмена (`!`) возвращает путь в git ровно так же, как
+    отсутствие строки, поэтому проверяется и она.
+    """
+    patterns, negations = _gitignore_patterns(project)
+    missing = []
+    for required in REQUIRED_IGNORES:
+        if any(_covers(p, required) for p in patterns) \
+                and not any(_covers(n, required) for n in negations):
+            continue
+        missing.append(required)
+    return missing
+
+
 def observe(project: Path) -> dict:
     """Живое наблюдение проекта: плагины, копии пакета, свои файлы, шаг инициализации ворктри.
 
@@ -281,6 +369,7 @@ def observe(project: Path) -> dict:
         "project_own": project_own,
         "unverifiable": unverifiable,
         "worktree": worktree_hook_state(project, plugins),
+        "gitignore": uncovered_ignores(project),
     }
 
 
@@ -414,6 +503,16 @@ def drift_for(consumer: dict, observed: dict, wanted: dict[str, str | None],
     if observed["worktree"]["hook"] and not observed["worktree"]["installsPlugins"]:
         drifts.append({"kind": "worktree-gap", "plugin": None, "installed": None,
                        "detail": f"{observed['worktree']['hook']} ворктри готовит, а плагины в них не ставит"})
+    if observed["gitignore"]:
+        # Правится в проекте, а не инструментом, — как и гэп ворктри. Список строк
+        # едет в отчёт целиком: по нему дописывают .gitignore, а тест сверяет его
+        # с каноническим блоком документа.
+        shown = ", ".join(observed["gitignore"][:4])
+        more = f" и ещё {len(observed['gitignore']) - 4}" if len(observed["gitignore"]) > 4 else ""
+        drifts.append({"kind": "gitignore", "plugin": None, "installed": None,
+                       "ignores": list(observed["gitignore"]),
+                       "detail": f"не игнорируется доставленное и производное: "
+                                 f"{len(observed['gitignore'])} строк ({shown}{more})"})
     return drifts
 
 
@@ -475,7 +574,162 @@ def _record(registry: dict, consumer: dict, observed: dict) -> None:
     consumer["lastChecked"] = utcnow()
 
 
+def catalog_identity() -> tuple[str, str | None]:
+    """Имя каталога и `owner/repo` — якорь реестра, одинаковый на всех машинах.
+
+    Имя берётся из каталога, а не из имени репозитория: `omp` адресует плагины
+    селектором `<плагин>@<имя каталога>`, и схема фиксирует это имя константой.
+    """
+    path = REPO_ROOT / ".omp-plugin" / "marketplace.json"
+    try:
+        name = json.loads(path.read_text(encoding="utf-8"))["name"]
+    except (OSError, json.JSONDecodeError, KeyError) as exc:
+        raise UsageError(f"каталог не читается: {path}: {exc}") from None
+    try:
+        result = subprocess.run(["git", "remote", "get-url", "origin"],
+                                cwd=REPO_ROOT, capture_output=True, text=True)
+    except FileNotFoundError:
+        return name, None
+    if result.returncode != 0:
+        return name, None
+    match = REMOTE_RE.search(result.stdout.strip())
+    return name, (match.group(1) if match else None)
+
+
+def cmd_init(args) -> int:
+    """Завести реестр на этой машине: якорь каталога и корни поиска.
+
+    Единственная команда, работающая без реестра. Потребителей здесь нет намеренно:
+    список знает машина, а не память оператора, и наполняет его `discover --apply`
+    из наблюдения. Пустой список — честная запись «ещё ничего не принято», а не
+    заглушка: `check` сразу назовёт каждого настоящего потребителя кандидатом.
+    """
+    if args.registry.exists():
+        raise UsageError(f"реестр уже есть: {args.registry} — правьте его напрямую "
+                         f"или удалите, чтобы завести заново")
+    if not args.registry.parent.is_dir():
+        raise UsageError(f"каталога для реестра нет: {args.registry.parent}")
+    if not args.root:
+        raise UsageError("нужен хотя бы один --root: каталог, в котором искать проекты "
+                         "с .omp/ (например: --root ~/dev)")
+    roots = []
+    for raw in args.root:
+        root = Path(raw).expanduser()
+        if not root.is_dir():
+            raise UsageError(f"корень поиска не найден: {root}")
+        roots.append(str(root.resolve()))
+
+    name, remote = catalog_identity()
+    catalog = {"name": name}
+    if remote:
+        catalog["remote"] = remote
+    doc = {
+        "$schema": os.path.relpath(args.schema, args.registry.parent),
+        "schemaVersion": 1,
+        "machine": socket.gethostname(),
+        "updated": utcnow(),
+        "catalog": catalog,
+        "discoverRoots": roots,
+        "exclude": [{"path": str(Path(raw).expanduser().resolve())} for raw in (args.exclude or [])],
+        "consumers": [],
+    }
+    if args.schema.exists():
+        schema = json.loads(args.schema.read_text(encoding="utf-8"))
+        errors = _validate(doc, schema, schema, "$")
+        if errors:
+            raise UsageError("собранный реестр не соответствует схеме:\n  " + "\n  ".join(errors)
+                             + "\n  имя каталога берётся из .omp-plugin/marketplace.json, "
+                               "схема фиксирует его константой — правятся вместе")
+    write_json(args.registry, doc)
+    if args.json:
+        print(json.dumps(doc, ensure_ascii=False, indent=2))
+    else:
+        print(f"✓ реестр заведён: {args.registry}")
+        print(f"  машина: {doc['machine']} · каталог: {name} · корни поиска: {len(roots)}")
+        print(f"  следующий шаг: python3 {invocation()} discover")
+    return EXIT_OK
+
+
+def _package_reason(path: Path) -> str | None:
+    """Почему `.omp/` этого кандидата — не установка потребителя.
+
+    `.omp/package.json` — признак пакета плагина (ADR plugin-delivery §5: omp-native
+    репозиторий отдаёт сам `.omp/` как пакет), `.omp-plugin/marketplace.json` —
+    признак каталога. Установка потребителя не несёт ни того, ни другого, поэтому
+    молча принимать такие каталоги в `consumers` нельзя: источник — не потребитель.
+    """
+    if (path / ".omp" / "package.json").is_file():
+        return "у .omp/ есть package.json — это пакет плагина, а не установка"
+    if (path / ".omp-plugin" / "marketplace.json").is_file():
+        return "есть .omp-plugin/marketplace.json — это каталог маркетплейса"
+    return None
+
+
+def _candidate_hint(path: str) -> str:
+    """Пометка к кандидату в отчёте: почему его, скорее всего, место в exclude."""
+    reason = _package_reason(Path(path))
+    return f"  ({reason})" if reason else ""
+
+
+def _record_exclusions(registry: dict, paths: list[str] | None) -> list[str]:
+    """Дописать пути в `exclude`. Идемпотентно: повторный путь не дублируется."""
+    added = []
+    for raw in (paths or []):
+        path = str(Path(raw).expanduser().resolve())
+        if any(entry["path"] == path for entry in registry["exclude"]):
+            continue
+        registry["exclude"].append({"path": path})
+        added.append(path)
+    return added
+
+
+def _adopt_candidates(registry: dict, args, found: list[str]) -> tuple[list[dict], list[dict]]:
+    """Принять кандидатов в реестр. Кандидат с именем не по схеме не принимается.
+
+    Ожидаемый состав = наблюдаемый: «здесь стоит то, что стоит». Обратный выбор —
+    записать пустой состав — оставил бы гейт зелёным при живом плагине, то есть
+    спрятал бы ровно то, от чего реестр и заводится.
+    """
+    candidates = found
+    if args.only:
+        known = {Path(p).name for p in found}
+        unknown = sorted(set(args.only) - known)
+        if unknown:
+            raise UsageError(f"нет таких кандидатов: {unknown} (есть: {sorted(known)})")
+        candidates = [p for p in found if Path(p).name in set(args.only)]
+
+    adopted, rejected = [], []
+    for path in candidates:
+        name = Path(path).name
+        if not CONSUMER_NAME.match(name):
+            rejected.append({"path": path, "reason": f"имя {name!r} не подходит под схему потребителя"})
+            continue
+        reason = _package_reason(Path(path))
+        if reason and name not in set(args.only or []):
+            rejected.append({"path": path,
+                             "reason": f"{reason}; принять осознанно — --only {name}"})
+            continue
+        if any(c["name"] == name or c["path"] == path for c in registry["consumers"]):
+            continue
+        observed, error = safe_observe(Path(path))
+        if error:
+            rejected.append({"path": path, "reason": error})
+            continue
+        consumer = {
+            "name": name,
+            "path": path,
+            "plugins": [{"id": plugin_id, "scope": "project", "installed": None, "pin": None}
+                        for plugin_id in sorted(observed["plugins"])],
+        }
+        _record(registry, consumer, observed)
+        registry["consumers"].append(consumer)
+        adopted.append({"name": name, "path": path, "plugins": sorted(observed["plugins"])})
+    return adopted, rejected
+
+
 def cmd_discover(registry: dict, args) -> int:
+    if (args.only or args.exclude) and not args.apply:
+        raise UsageError("--only и --exclude — модификаторы записи: без --apply менять нечего")
     rows = []
     broken = 0
     for consumer in registry["consumers"]:
@@ -493,9 +747,25 @@ def cmd_discover(registry: dict, args) -> int:
             "own": len(observed["project_own"]),
         })
     found = unmanaged(registry)
+    adopted, excluded, rejected = [], [], []
+    if args.apply:
+        # Исключения применяются до принятия: путь, названный не-потребителем, не
+        # должен попасть в реестр ни потребителем, ни кандидатом.
+        excluded = _record_exclusions(registry, args.exclude)
+        adopted, rejected = _adopt_candidates(registry, args, unmanaged(registry))
+        registry["updated"] = utcnow()
+        write_json(args.registry, registry)
+        # Гейт считает по состоянию после принятия: исключённые кандидаты в него
+        # больше не входят, а непринятые — входят и делают прогон красным.
+        remaining = unmanaged(registry)
+    else:
+        remaining = found
+
     if args.json:
-        print(json.dumps({"consumers": rows, "unmanaged": found}, ensure_ascii=False, indent=2))
-        return EXIT_DRIFT if (found or broken) else EXIT_OK
+        print(json.dumps({"consumers": rows, "unmanaged": remaining, "applied": bool(args.apply),
+                          "adopted": adopted, "excluded": excluded, "rejected": rejected},
+                         ensure_ascii=False, indent=2))
+        return EXIT_DRIFT if (remaining or broken or rejected) else EXIT_OK
 
     for row in rows:
         if "error" in row:
@@ -504,13 +774,22 @@ def cmd_discover(registry: dict, args) -> int:
         plugins = ", ".join(f"{k}={v}" for k, v in row["plugins"].items()) or "плагинов нет"
         copies = f" · перекрывают пакет: {row['shadowing']} · свои: {row['own']}" if row["flat"] else ""
         print(f"  {row['name']:<22} {plugins}{copies}")
-    if found:
+    if args.apply:
+        for row in adopted:
+            print(f"  + принят: {row['name']:<20} {', '.join(row['plugins']) or 'плагинов нет'}")
+        for path in excluded:
+            print(f"  − исключён: {path}")
+        for row in rejected:
+            print(f"  ! не принят: {row['path']}: {row['reason']}")
+        if adopted or excluded:
+            print(f"✓ реестр обновлён: {args.registry}")
+    if remaining:
         print("\nНе в реестре (кандидаты):")
-        for path in found:
-            print(f"  {path}")
+        for path in remaining:
+            print(f"  {path}{_candidate_hint(path)}")
     else:
         print("\nНеучтённых проектов с .omp/ нет.")
-    return EXIT_DRIFT if (found or broken) else EXIT_OK
+    return EXIT_DRIFT if (remaining or broken or rejected) else EXIT_OK
 
 
 def cmd_scan(registry: dict, args) -> int:
@@ -989,7 +1268,7 @@ def cmd_migrate(registry: dict, args) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="consumers.py",
-        description="Реестр потребителей каталога: обнаружение, дрейф, обновление, проверка.",
+        description="Реестр потребителей каталога: заведение, обнаружение, дрейф, обновление, проверка.",
     )
     parser.add_argument("--registry", type=Path, default=DEFAULT_REGISTRY,
                         help="файл реестра (по умолчанию .consumers.json в корне клона каталога)")
@@ -1002,7 +1281,18 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub = parser.add_subparsers(dest="command", required=True)
 
-    sub.add_parser("discover", parents=[common], help="что есть на машине; неучтённые потребители")
+    init = sub.add_parser("init", parents=[common],
+                          help="завести реестр на этой машине (единственная команда без реестра)")
+    init.add_argument("--root", action="append",
+                      help="каталог, в котором искать проекты с .omp/ (можно несколько)")
+    init.add_argument("--exclude", action="append",
+                      help="путь, который не потребитель (источник пакета, машинный слой)")
+
+    discover = sub.add_parser("discover", parents=[common], help="что есть на машине; неучтённые потребители")
+    discover.add_argument("--only", action="append", help="принять только этих кандидатов (имя каталога)")
+    discover.add_argument("--apply", action="store_true",
+                          help="принять кандидатов в реестр (по умолчанию — отчёт)")
+    discover.add_argument("--exclude", action="append", help="дописать путь в exclude (только с --apply)")
 
     scan = sub.add_parser("scan", parents=[common], help="обновить наблюдаемое состояние в реестре")
     scan.add_argument("--only", action="append", help="только эти потребители (можно несколько)")
@@ -1034,8 +1324,11 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
-        registry = load_registry(args.registry, args.schema)
         require_omp()
+        # init заводит реестр, а не читает его: единственная команда до load_registry.
+        if args.command == "init":
+            return cmd_init(args)
+        registry = load_registry(args.registry, args.schema)
         return {
             "discover": cmd_discover,
             "scan": cmd_scan,
