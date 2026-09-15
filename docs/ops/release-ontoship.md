@@ -3,7 +3,7 @@ node_type: runbook
 title: Релиз плагина
 service: _platform
 status: active
-updated: 2026-09-14
+updated: 2026-09-15
 links:
   documents: [../../.omp-plugin/marketplace.json]
   relates_to: [../decisions/plugin-delivery.md]
@@ -20,8 +20,8 @@ links:
    ```bash
    cd ~/home/dev/personal/ontoship-omp
    # bump version в package.json (метаданные пакета) и коммит:
-   #   chore(release): 0.4.0 — версия пакета в манифесте
-   git tag -a v0.4.0 -m "v0.4.0 — что изменилось"
+   #   chore(release): X.Y.Z — что вошло в релиз
+   git tag -a vX.Y.Z -m "vX.Y.Z — что изменилось"
    git push --tags
    ```
 
