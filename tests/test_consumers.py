@@ -1184,13 +1184,32 @@ def test_gitignore_anchored_and_slashless_forms_cover_the_policy(machine: Machin
     assert result.returncode == 0, result.stdout + result.stderr
 
 
-def test_negation_in_gitignore_brings_delivered_files_back(machine: Machine) -> None:
-    """`!` возвращает путь в git так же, как отсутствие строки."""
-    path = machine.project("negated",
-                           gitignore="\n".join(DOCUMENTED_IGNORES) + "\n!.omp/plugins/\n")
-    machine.consumer("negated", path, [])
+def test_gitignore_with_wholesale_parent_and_own_subdirs(machine: Machine) -> None:
+    """Живая раскладка потребителя: `.omp/*` закрывает всё под `.omp/`, а `!` — про своё.
+
+    Проект версионирует собственные rules/skills/commands и снимает для них закрытие.
+    Это решение о своём, а не дрейф: проверка смотрит на закрытие путём, иначе
+    осознанная раскладка получает ложный дрейф за то, что держит своё в git.
+    """
+    path = machine.project("tracked", gitignore=(
+        ".omp/*\n"
+        "!.omp/RULES.md\n!.omp/rules/\n!.omp/skills/\n!.omp/commands/\n"
+        "!.omp/scripts/\n!.omp/extensions/\n"
+        ".artifacts/\n.gitmark/\n*-map.html\n"))
+    machine.consumer("tracked", path, [])
 
     result = machine.run(machine.write_registry(), "check", "--json")
 
     ignores = json.loads(result.stdout)["consumers"][0]["drifts"][0]["ignores"]
-    assert ignores == [".omp/plugins/"]
+    assert ignores == [".scratch/"], "закрытое родителем — не дрейф; незакрытое — дрейф"
+
+
+def test_gitignore_glob_does_not_cross_segments(machine: Machine) -> None:
+    """`*` в git не переходит через `/`: `.omp/*` закрывает сегмент, а не всё дерево."""
+    path = machine.project("shallow", gitignore=".omp/*\n.artifacts/\n.gitmark/\n*-map.html\n")
+    machine.consumer("shallow", path, [])
+
+    result = machine.run(machine.write_registry(), "check", "--json")
+
+    ignores = json.loads(result.stdout)["consumers"][0]["drifts"][0]["ignores"]
+    assert ignores == [".scratch/"], "`.omp/*` накрывает `.omp/plugins/`, `.omp/mcp.json` и прочее"

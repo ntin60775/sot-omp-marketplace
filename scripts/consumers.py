@@ -260,53 +260,78 @@ def worktree_hook_state(project: Path, plugins: dict) -> dict:
     return {"hook": WORKTREE_HOOK, "installsPlugins": installs}
 
 
-def _gitignore_patterns(project: Path) -> tuple[list[str], list[str]]:
-    """Шаблоны проекта и то, что он отменяет через `!`: отмена сильнее покрытия."""
+def _gitignore_patterns(project: Path) -> list[str]:
+    """Шаблоны `.gitignore` проекта без комментариев и отмен.
+
+    Отмена (`!`) в проверке не участвует: она делает путь версионируемым, а это
+    решение проекта о своём (свои rules/skills/commands живут в git и по политике
+    им там и место). Судить о том, что проект держит у себя, инструмент не берётся —
+    он проверяет, что политика вообще применена и пути закрыты.
+    """
     path = project / ".gitignore"
     if not path.is_file():
-        return [], []
-    patterns, negations = [], []
+        return []
+    patterns = []
     for raw in path.read_text(encoding="utf-8", errors="replace").splitlines():
         line = raw.strip()
-        if not line or line.startswith("#"):
+        if not line or line.startswith("#") or line.startswith("!"):
             continue
-        if line.startswith("!"):
-            negations.append(line[1:].strip())
+        patterns.append(line)
+    return patterns
+
+
+def _glob_regex(pattern: str) -> str:
+    """Шаблон `.gitignore` → регулярка по относительному пути.
+
+    `*` и `?` не переходят через `/`, `**` переходит: так же, как их читает git.
+    """
+    out, index = [], 0
+    while index < len(pattern):
+        char = pattern[index]
+        if char == "*":
+            if index + 1 < len(pattern) and pattern[index + 1] == "*":
+                out.append(".*")
+                index += 2
+                continue
+            out.append("[^/]*")
+        elif char == "?":
+            out.append("[^/]")
         else:
-            patterns.append(line)
-    return patterns, negations
+            out.append(re.escape(char))
+        index += 1
+    return "".join(out)
 
 
 def _covers(pattern: str, required: str) -> bool:
-    """Шаблон покрывает требуемую строку: точно либо как каталог-префикс.
+    """Шаблон закрывает требуемый путь: сам путь или любой его каталог-предок.
 
-    `.omp/` покрывает `.omp/plugins/` и `.omp/.backup-*`; `.omp/plugins/` покрывает
-    `.omp/plugins/` и всё под ним. Ведущий `/` (привязка к корню) и хвостовой слэш
-    на смысл не влияют — git читает `.omp/plugins`, `/.omp/plugins/` и `.omp/plugins/`
-    одинаково, — а `.gitignore` из одного `*` игнорирует всё.
+    `.omp/*` закрывает `.omp/plugins/` (совпадение по сегменту), `.omp/` закрывает
+    всё под `.omp/`, `*` закрывает всё. Ведущий `/` (привязка к корню) и хвостовой
+    слэш на смысл не влияют — git читает `.omp/plugins`, `/.omp/plugins/` и
+    `.omp/plugins/` одинаково.
     """
-    base = pattern.lstrip("/").rstrip("/")
-    wanted = required.lstrip("/").rstrip("/")
-    if not base.strip("*"):
-        return True
-    return base == wanted or wanted.startswith(base + "/")
+    pattern = pattern.lstrip("/").rstrip("/")
+    if not pattern:
+        return False
+    regex = re.compile(_glob_regex(pattern) + r"(?:/.*)?")
+    candidate = required.lstrip("/").rstrip("/")
+    while True:
+        if regex.fullmatch(candidate):
+            return True
+        if "/" not in candidate:
+            return False
+        candidate = candidate.rsplit("/", 1)[0]
 
 
 def uncovered_ignores(project: Path) -> list[str]:
-    """Требуемые строки `.gitignore`, которые проект не игнорирует.
+    """Требуемые строки `.gitignore`, которые проект не закрывает.
 
     Политика — «доставленное не версионируется»: файл, попавший в git, — вторая
-    правда рядом с пакетом. Отмена (`!`) возвращает путь в git ровно так же, как
-    отсутствие строки, поэтому проверяется и она.
+    правда рядом с пакетом.
     """
-    patterns, negations = _gitignore_patterns(project)
-    missing = []
-    for required in REQUIRED_IGNORES:
-        if any(_covers(p, required) for p in patterns) \
-                and not any(_covers(n, required) for n in negations):
-            continue
-        missing.append(required)
-    return missing
+    patterns = _gitignore_patterns(project)
+    return [required for required in REQUIRED_IGNORES
+            if not any(_covers(pattern, required) for pattern in patterns)]
 
 
 def observe(project: Path) -> dict:
