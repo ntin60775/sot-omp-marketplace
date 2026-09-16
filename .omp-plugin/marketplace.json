@@ -14,11 +14,10 @@
         "source": "git-subdir",
         "url": "git@github.com:ntin60775/ontoship-omp.git",
         "path": ".omp",
-        "ref": "v0.4.3"
+        "ref": "v0.4.4"
       },
       "description": "База знаний на markdown+git и dev-flow: поиск по KB, курация, контракт ship. Предметно-независим — ставится в любой проект, не только 1С.",
-      "version": "0.4.3",
-      "category": "development",
+      "version": "0.4.4",
       "keywords": [
         "kb",
         "gitmark",
@@ -31,11 +30,10 @@
       "source": {
         "source": "url",
         "url": "git@github.com:ntin60775/1c-omp.git",
-        "ref": "v0.1.2"
+        "ref": "v0.1.3"
       },
       "description": "Контур 1С-разработки: правила BSL, гейты Unica, навыки развёртывания контура. Ставится на уровень проекта и требует unica@unica.",
-      "version": "0.1.2",
-      "category": "development",
+      "version": "0.1.3",
       "keywords": [
         "1c",
         "bsl",
