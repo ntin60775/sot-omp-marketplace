@@ -54,6 +54,20 @@ OWN_SUBDIRS_IGNORES = (
     "*-map.html\n"
 )
 
+# Хук ворктри: живая форма — обёртка зовёт канон из пакета, логика живёт в плагине.
+# Два способа назвать путь; регексп чекера на них реагирует по-разному, поэтому обе
+# формы закреплены тестами.
+CANON_REL = "skills/1c-project-bootstrap/scripts/init-worktree.sh"
+WRAPPER_VIA_LITERAL = (
+    '#!/usr/bin/env bash\nset -euo pipefail\n'
+    f'CANON="{CANON_REL}"\n'
+    'exec bash "$ROOT/.omp/plugins/node_modules/1c-omp/$CANON" "$@"\n')
+WRAPPER_VIA_VARIABLE = (
+    '#!/usr/bin/env bash\nset -euo pipefail\n'
+    'PKG="$MAIN/.omp/plugins/node_modules/1c-omp"\n'
+    f'CANON="$PKG/{CANON_REL}"\n'
+    'exec bash "$CANON" "$@"\n')
+
 FAKE_OMP = """#!/usr/bin/env bash
 echo "$(pwd)|$*" >> "${FAKE_OMP_LOG}"
 if [ "$1" = "plugin" ] && [ "$2" = "list" ]; then
@@ -683,16 +697,9 @@ def test_migrate_keeps_project_own_files_and_removes_copies(machine: Machine) ->
 
 def test_hook_delegating_to_package_canon_counts_as_installing(machine: Machine) -> None:
     """Обёртка над каноном: установку делает канон из пакета, а не файл проекта."""
-    canon = "skills/1c-project-bootstrap/scripts/init-worktree.sh"
-    path = machine.project("wrapper", [("1c@sot-omp-marketplace", "project", "0.1.2")])
-    (path / "tasks").mkdir(exist_ok=True)
-    (path / "tasks" / "init-worktree.sh").write_text(
-        '#!/usr/bin/env bash\nset -euo pipefail\nCANON="' + canon + '"\n'
-        'for base in "$ROOT" "$MAIN"; do\n'
-        '\tcandidate="$base/.omp/plugins/node_modules/1c-omp/$CANON"\n'
-        '\tif [[ -f "$candidate" ]]; then exec bash "$candidate" "$@"; fi\ndone\n',
-        encoding="utf-8")
-    machine.package_file("1c@sot-omp-marketplace", "0.1.2", canon,
+    path = machine.project("wrapper", [("1c@sot-omp-marketplace", "project", "0.1.2")],
+                           hook=WRAPPER_VIA_LITERAL)
+    machine.package_file("1c@sot-omp-marketplace", "0.1.2", CANON_REL,
                          "#!/usr/bin/env bash\nomp plugin install --scope project x\n")
     machine.consumer("wrapper", path, [("1c@sot-omp-marketplace", "project", "0.1.2")])
 
@@ -704,11 +711,9 @@ def test_hook_delegating_to_package_canon_counts_as_installing(machine: Machine)
 
 def test_reminder_in_echo_is_not_an_install_step(machine: Machine) -> None:
     """Напоминание в echo — не установка: иначе гейт зеленеет, а ворктри остаются без плагинов."""
-    path = machine.project("reminder", [("ontoship@sot-omp-marketplace", "project", "0.4.0")])
-    (path / "tasks").mkdir(exist_ok=True)
-    (path / "tasks" / "init-worktree.sh").write_text(
-        "#!/usr/bin/env bash\necho 'Поставь плагин: omp plugin install --scope project ontoship@x' >&2\n",
-        encoding="utf-8")
+    path = machine.project("reminder", [("ontoship@sot-omp-marketplace", "project", "0.4.0")],
+                           hook="#!/usr/bin/env bash\n"
+                                "echo 'Поставь плагин: omp plugin install --scope project ontoship@x' >&2\n")
     machine.consumer("reminder", path, [("ontoship@sot-omp-marketplace", "project", "0.4.0")])
 
     result = machine.run(machine.write_registry(), "check")
@@ -718,13 +723,10 @@ def test_reminder_in_echo_is_not_an_install_step(machine: Machine) -> None:
 
 
 def test_reminder_in_canon_echo_is_not_an_install_step(machine: Machine) -> None:
-    canon = "skills/1c-project-bootstrap/scripts/init-worktree.sh"
-    path = machine.project("wrapper", [("1c@sot-omp-marketplace", "project", "0.1.2")])
-    (path / "tasks").mkdir(exist_ok=True)
-    (path / "tasks" / "init-worktree.sh").write_text(
-        '#!/usr/bin/env bash\nCANON="' + canon + '"\nexec bash "$ROOT/.omp/plugins/node_modules/1c-omp/$CANON" "$@"\n',
-        encoding="utf-8")
-    machine.package_file("1c@sot-omp-marketplace", "0.1.2", canon,
+    """Напоминание в каноне — тоже не установка: смотреть надо на код, а не на текст."""
+    path = machine.project("wrapper", [("1c@sot-omp-marketplace", "project", "0.1.2")],
+                           hook=WRAPPER_VIA_LITERAL)
+    machine.package_file("1c@sot-omp-marketplace", "0.1.2", CANON_REL,
                          "#!/usr/bin/env bash\necho 'не забудь: omp plugin install --scope project 1c@x'\n")
     machine.consumer("wrapper", path, [("1c@sot-omp-marketplace", "project", "0.1.2")])
 
@@ -736,12 +738,9 @@ def test_reminder_in_canon_echo_is_not_an_install_step(machine: Machine) -> None
 
 def test_install_step_inside_quotes_is_still_code(machine: Machine) -> None:
     """Команда в коде рядом с echo — установка; срезаем только кавычки, не строку."""
-    canon = "skills/1c-project-bootstrap/scripts/init-worktree.sh"
-    path = machine.project("wrapper", [("1c@sot-omp-marketplace", "project", "0.1.2")])
-    (path / "tasks").mkdir(exist_ok=True)
-    (path / "tasks" / "init-worktree.sh").write_text(
-        '#!/usr/bin/env bash\nCANON="' + canon + '"\nexec bash "$ROOT/$CANON" "$@"\n', encoding="utf-8")
-    machine.package_file("1c@sot-omp-marketplace", "0.1.2", canon,
+    path = machine.project("wrapper", [("1c@sot-omp-marketplace", "project", "0.1.2")],
+                           hook=WRAPPER_VIA_LITERAL)
+    machine.package_file("1c@sot-omp-marketplace", "0.1.2", CANON_REL,
                          '#!/usr/bin/env bash\n'
                          'if (cd "$WORKTREE" && omp plugin install --scope project "$spec"); then\n'
                          '\techo "✓ плагин $spec"\nfi\n')
@@ -759,15 +758,9 @@ def test_hook_delegating_through_a_variable_counts_as_installing(machine: Machin
     Регексп забирает имя переменной в путь, поэтому пакет-относительный хвост нужно
     пробовать отдельно: иначе корректная обёртка получает ложный `worktree-gap`.
     """
-    canon = "skills/1c-project-bootstrap/scripts/init-worktree.sh"
-    path = machine.project("wrapper-var", [("1c@sot-omp-marketplace", "project", "0.1.2")])
-    (path / "tasks").mkdir(exist_ok=True)
-    (path / "tasks" / "init-worktree.sh").write_text(
-        '#!/usr/bin/env bash\nset -euo pipefail\n'
-        'PKG="$MAIN/.omp/plugins/node_modules/1c-omp"\n'
-        'CANON="$PKG/skills/1c-project-bootstrap/scripts/init-worktree.sh"\n'
-        'exec bash "$CANON" "$@"\n', encoding="utf-8")
-    machine.package_file("1c@sot-omp-marketplace", "0.1.2", canon,
+    path = machine.project("wrapper-var", [("1c@sot-omp-marketplace", "project", "0.1.2")],
+                           hook=WRAPPER_VIA_VARIABLE)
+    machine.package_file("1c@sot-omp-marketplace", "0.1.2", CANON_REL,
                          "#!/usr/bin/env bash\nomp plugin install --scope project x\n")
     machine.consumer("wrapper-var", path, [("1c@sot-omp-marketplace", "project", "0.1.2")])
 
@@ -778,13 +771,10 @@ def test_hook_delegating_through_a_variable_counts_as_installing(machine: Machin
 
 
 def test_hook_delegating_to_silent_canon_is_a_gap(machine: Machine) -> None:
-    canon = "skills/1c-project-bootstrap/scripts/init-worktree.sh"
-    path = machine.project("wrapper", [("1c@sot-omp-marketplace", "project", "0.1.2")])
-    (path / "tasks").mkdir(exist_ok=True)
-    (path / "tasks" / "init-worktree.sh").write_text(
-        '#!/usr/bin/env bash\nCANON="' + canon + '"\nexec bash "$ROOT/.omp/plugins/node_modules/1c-omp/$CANON" "$@"\n',
-        encoding="utf-8")
-    machine.package_file("1c@sot-omp-marketplace", "0.1.2", canon,
+    """Канон без установки — гэп: обёртка делегирует, а плагинов в ворктри не будет."""
+    path = machine.project("wrapper", [("1c@sot-omp-marketplace", "project", "0.1.2")],
+                           hook=WRAPPER_VIA_LITERAL)
+    machine.package_file("1c@sot-omp-marketplace", "0.1.2", CANON_REL,
                          "#!/usr/bin/env bash\necho 'копирую артефакты'\n")
     machine.consumer("wrapper", path, [("1c@sot-omp-marketplace", "project", "0.1.2")])
 
