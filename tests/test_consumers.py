@@ -613,6 +613,30 @@ def test_verify_human_output_marks_warnings(machine: Machine) -> None:
     assert "[WARN] .gitignore: нет строки .scratch/" in result.stdout
 
 
+def test_extension_copies_shadow_the_package_and_are_migrated(machine: Machine) -> None:
+    """Плагин может доставлять хуки: копия в проекте глушит плагинный гейт.
+
+    `.omp/extensions/` по политике — каталог проекта, но файл под плагинным именем
+    там уже не своё, а копия: нативный провайдер (100) перекрывает плагинный (90),
+    и поставленный контур работает по старому коду.
+    """
+    path = machine.project("hooked", [("1c@sot-omp-marketplace", "project", "0.1.2")],
+                           flat=[".omp/extensions"])
+    machine.package_file("1c@sot-omp-marketplace", "0.1.2", "extensions/unica-gate.ts", "package gate")
+    (path / ".omp" / "extensions" / "unica-gate.ts").write_text("package gate", encoding="utf-8")
+    machine.consumer("hooked", path, [("1c@sot-omp-marketplace", "project", "0.1.2")],
+                     flat=[".omp/extensions"])
+
+    check = machine.run(machine.write_registry(), "check", "--json")
+    kinds = {d["kind"] for row in json.loads(check.stdout)["consumers"] for d in row["drifts"]}
+    assert "legacy" in kinds, "копия хука перекрывает плагинный гейт — это дрейф"
+
+    migrated = machine.run(machine.write_registry(), "migrate", "--apply")
+
+    assert migrated.returncode == 0, migrated.stdout
+    assert not (path / ".omp" / "extensions" / "unica-gate.ts").exists()
+
+
 def test_migrate_accept_divergent_removes_flagged_files(machine: Machine) -> None:
     """Без флага расходящийся файл блокирует; с флагом — снимается по решению оператора."""
     path = machine.project("legacy", [("ontoship@sot-omp-marketplace", "project", "0.4.0")],

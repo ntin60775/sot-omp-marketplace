@@ -29,7 +29,7 @@ DEFAULT_REGISTRY = REPO_ROOT / ".consumers.json"
 DEFAULT_SCHEMA = REPO_ROOT / "schemas" / "consumer-registry.schema.json"
 DEFAULT_MARKETPLACES = Path.home() / ".omp" / "marketplaces.json"
 
-FLAT_DIRS = (".omp/skills", ".omp/rules", ".omp/commands", ".omp/scripts")
+FLAT_DIRS = (".omp/skills", ".omp/rules", ".omp/commands", ".omp/scripts", ".omp/extensions")
 WORKTREE_HOOK = "tasks/init-worktree.sh"
 INSTALL_STEP = re.compile(r"omp\s+plugin\s+(?:install|upgrade)")
 SCRIPT_REF = re.compile(r"[\w][\w./-]*\.sh")
