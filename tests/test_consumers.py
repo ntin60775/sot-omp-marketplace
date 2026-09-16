@@ -729,6 +729,30 @@ def test_install_step_inside_quotes_is_still_code(machine: Machine) -> None:
     assert "worktree-gap" not in result.stdout
 
 
+def test_hook_delegating_through_a_variable_counts_as_installing(machine: Machine) -> None:
+    """Обёртка зовёт канон через переменную — путь в тексте выглядит как `PKG/skills/…`.
+
+    Регексп забирает имя переменной в путь, поэтому пакет-относительный хвост нужно
+    пробовать отдельно: иначе корректная обёртка получает ложный `worktree-gap`.
+    """
+    canon = "skills/1c-project-bootstrap/scripts/init-worktree.sh"
+    path = machine.project("wrapper-var", [("1c@sot-omp-marketplace", "project", "0.1.2")])
+    (path / "tasks").mkdir(exist_ok=True)
+    (path / "tasks" / "init-worktree.sh").write_text(
+        '#!/usr/bin/env bash\nset -euo pipefail\n'
+        'PKG="$MAIN/.omp/plugins/node_modules/1c-omp"\n'
+        'CANON="$PKG/skills/1c-project-bootstrap/scripts/init-worktree.sh"\n'
+        'exec bash "$CANON" "$@"\n', encoding="utf-8")
+    machine.package_file("1c@sot-omp-marketplace", "0.1.2", canon,
+                         "#!/usr/bin/env bash\nomp plugin install --scope project x\n")
+    machine.consumer("wrapper-var", path, [("1c@sot-omp-marketplace", "project", "0.1.2")])
+
+    result = machine.run(machine.write_registry(), "check")
+
+    assert result.returncode == 0, result.stdout
+    assert "worktree-gap" not in result.stdout
+
+
 def test_hook_delegating_to_silent_canon_is_a_gap(machine: Machine) -> None:
     canon = "skills/1c-project-bootstrap/scripts/init-worktree.sh"
     path = machine.project("wrapper", [("1c@sot-omp-marketplace", "project", "0.1.2")])

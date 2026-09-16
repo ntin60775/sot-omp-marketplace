@@ -234,6 +234,20 @@ def _installs_plugins(text: str) -> bool:
     return False
 
 
+def _path_suffixes(candidate: str) -> list[str]:
+    """Хвосты пути от длинного к короткому: `PKG/skills/x.sh` → он же, затем `skills/x.sh`.
+
+    Обёртка называет канон через переменную (`"$PKG/skills/…/canon.sh"`), и регексп
+    забирает имя переменной в путь — пакет-относительный путь оказывается одним из
+    хвостов. Голое имя файла не пробуем: одноимённый чужой скрипт в пакете дал бы
+    ложное «ставит плагины».
+    """
+    parts = candidate.split("/")
+    if len(parts) == 1:
+        return [candidate]
+    return ["/".join(parts[start:]) for start in range(len(parts) - 1)]
+
+
 def worktree_hook_state(project: Path, plugins: dict) -> dict:
     """Готовит ли проект ворктри и ставит ли он в них плагины.
 
@@ -249,9 +263,10 @@ def worktree_hook_state(project: Path, plugins: dict) -> dict:
     if not installs:
         roots = [p["installPath"] for p in plugins.values() if p.get("installPath")]
         for candidate in sorted(set(SCRIPT_REF.findall(text))):
-            for root in roots:
-                script = Path(root) / candidate
-                if script.is_file() and _installs_plugins(
+            for suffix in _path_suffixes(candidate):
+                script = next((Path(root) / suffix for root in roots
+                               if (Path(root) / suffix).is_file()), None)
+                if script and _installs_plugins(
                         script.read_text(encoding="utf-8", errors="replace")):
                     installs = True
                     break
