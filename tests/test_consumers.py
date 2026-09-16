@@ -35,6 +35,25 @@ def documented_ignores() -> list[str]:
 
 DOCUMENTED_IGNORES = documented_ignores()
 
+# Канонический блок — раскладка по умолчанию: потребитель без него уже дрейфует.
+CANONICAL_IGNORES = "\n".join(DOCUMENTED_IGNORES) + "\n"
+
+# Живая раскладка (найдена на 1С-потребителе): `.omp/*` закрывает всё под `.omp/`,
+# а `!` возвращает в git своё — свои rules/skills/commands проект версионирует
+# осознанно, и проверка политики об этом не судит.
+OWN_SUBDIRS_IGNORES = (
+    ".omp/*\n"
+    "!.omp/RULES.md\n"
+    "!.omp/rules/\n"
+    "!.omp/skills/\n"
+    "!.omp/commands/\n"
+    "!.omp/scripts/\n"
+    "!.omp/extensions/\n"
+    ".artifacts/\n"
+    ".gitmark/\n"
+    "*-map.html\n"
+)
+
 FAKE_OMP = """#!/usr/bin/env bash
 echo "$(pwd)|$*" >> "${FAKE_OMP_LOG}"
 if [ "$1" = "plugin" ] && [ "$2" = "list" ]; then
@@ -100,13 +119,13 @@ class Machine:
         """plugins: (id, scope, version); flat: каталоги вроде .omp/rules; hook: текст скрипта ворктри.
 
         `.gitignore` по умолчанию — канонический блок из документа: потребитель без
-        него уже дрейфует, и это проверяет отдельный тест, а не каждый.
+        него уже дрейфует, и это проверяет отдельный тест, а не каждый. Живая
+        раскладка «`.omp/*` плюс `!` для своих каталогов» — `OWN_SUBDIRS_IGNORES`.
         """
         path = self.root / name
         (path / ".omp").mkdir(parents=True)
         (path / ".gitignore").write_text(
-            gitignore if gitignore is not None else "\n".join(DOCUMENTED_IGNORES) + "\n",
-            encoding="utf-8")
+            gitignore if gitignore is not None else CANONICAL_IGNORES, encoding="utf-8")
         for directory in flat:
             (path / directory).mkdir(parents=True, exist_ok=True)
         if hook is not None:
@@ -1191,11 +1210,7 @@ def test_gitignore_with_wholesale_parent_and_own_subdirs(machine: Machine) -> No
     Это решение о своём, а не дрейф: проверка смотрит на закрытие путём, иначе
     осознанная раскладка получает ложный дрейф за то, что держит своё в git.
     """
-    path = machine.project("tracked", gitignore=(
-        ".omp/*\n"
-        "!.omp/RULES.md\n!.omp/rules/\n!.omp/skills/\n!.omp/commands/\n"
-        "!.omp/scripts/\n!.omp/extensions/\n"
-        ".artifacts/\n.gitmark/\n*-map.html\n"))
+    path = machine.project("tracked", gitignore=OWN_SUBDIRS_IGNORES)
     machine.consumer("tracked", path, [])
 
     result = machine.run(machine.write_registry(), "check", "--json")
