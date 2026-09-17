@@ -42,9 +42,9 @@ links:
 - `metadata.version` — версия каталога;
 - `plugins[]` — записи плагинов (name, source, версия/ref).
 
-**Текущее состояние: version `0.3.10` (версия каталога), две записи** — `ontoship`
-v0.4.3 (git-subdir, `path: ".omp"`, `ref: "v0.4.3"`) и `1c` v0.1.2 (url,
-`ref: "v0.1.2"`). Кого эти записи обслуживают и что у них стоит фактически — реестр
+**Текущее состояние** (источник истины — сам `.omp-plugin/marketplace.json`; снимок на
+2026-09-17): version `0.3.12` (версия каталога), две записи — `ontoship` v0.4.5
+(git-subdir, `path: ".omp"`, `ref: "v0.4.5"`) и `1c` v0.1.5 (url, `ref: "v0.1.5"`). Кого эти записи обслуживают и что у них стоит фактически — реестр
 потребителей машины ([consumer-registry.md](consumer-registry.md)); работы по
 приведению машины к плагинной поставке — план
 [consumer-delivery](../plans/consumer-delivery.md). План

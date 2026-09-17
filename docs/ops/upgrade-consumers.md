@@ -129,6 +129,8 @@ git mv .omp/rules/test-contour.md .omp/rules/erp-main-test-contour.md   # при
 | `не в реестре (кандидаты)` | проект с `.omp/` не описан | добавить в `consumers` или в `exclude` |
 | дрейф `gitignore` | доставленное не игнорируется — попадёт в git | дополнить `.gitignore` каноническим блоком из [consumer-repo-layout](../reference/consumer-repo-layout.md); `upgrade` по нему ничего не делает |
 | `реестр не найден` (exit 2) | свежий клон / новая машина — `.consumers.json` отсутствует | `init` + `discover --apply` (шаг 0) |
+| `upgrade` падает: `Runtime package name "X" conflicts with installed package "X"` | в `<project>/.omp/plugins/omp-plugins.lock.json` осталась запись по **runtime-имени** пакета (`1c-omp` при плагине `1c`) от прежней установки — установщик видит её как «установленный пакет» | убрать запись плагина из `lock` → `omp plugin upgrade <id>@<marketplace> --scope=project`. Не помогают `--force`, `uninstall`, `doctor --fix` и удаление симлинка (проверено 2026-09-17 на omp 18.2.4: 6 проектов из 7) |
+| после апгрейда в других проектах `<project>/.omp/plugins/node_modules/<pkg>` — битый симлинк | первый апгрейд снёс общий кэш `~/.omp/plugins/cache/plugins/<каталог>___<плагин>___<старая версия>`, а симлинки остальных проектов смотрели на него | `omp plugin upgrade <id>@<marketplace> --scope=project` в каждом затронутом проекте — перепривязывает на живую версию. `check` этого не видит: он читает реестр маркетплейса, а не материализацию в `node_modules` |
 
 ## Ловушка: `--dry-run` у omp не dry-run
 
