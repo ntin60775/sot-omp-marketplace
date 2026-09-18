@@ -2,8 +2,8 @@
 node_type: plan
 title: Поставка потребителям — реестр, обновление, снятие плоских копий
 service: _platform
-status: active
-updated: 2026-09-16
+status: archived
+updated: 2026-09-18
 links:
   depends_on: [../decisions/plugin-delivery.md, ../reference/consumer-registry.md]
   documents: [../../scripts/consumers.py, ../../schemas/consumer-registry.schema.json]
@@ -12,13 +12,14 @@ links:
 
 # Контракт: поставка плагинов потребителям и их обновление
 
-> **Состояние на 2026-09-14.** Оператор авторизовал ран и разделил его на два шага.
-> **Шаг 1 (этот ран)**: инструмент `scripts/consumers.py`, тесты, runbook
-> [upgrade-consumers](../ops/upgrade-consumers.md), реестр — **отгружено**. **Шаг 2
-> (ждёт отдельного подтверждения)**: установка плагинов и снятие плоских копий в
-> проектах машины — `upgrade --yes` → `migrate` (отчёт) → `migrate --apply` →
-> `verify` — плюс шаг установки плагинов в `tasks/init-worktree.sh`. План остаётся
-> `active`, пока шаг 2 не выполнен.
+> **План закрыт 2026-09-18.** Шаг 1 (инструмент, тесты, runbook, реестр) отгружен
+> 2026-09-14. Шаг 2 выполнен: плоских копий нет ни у одного из 12 потребителей
+> (`legacy.flat: 0` в реестре, живого дрейфа `legacy` нет), плагины стоят в проектной
+> области и совпадают с версиями каталога, `check` — ноль жёсткого дрейфа, `verify`
+> зелёный у всех двенадцати; хуки ворктри там, где ворктри используются, плагины
+> ставят (`erp-demo`, `erp-main`, `project-bp` и `fin-agent` — последний добавлен
+> 2026-09-18, коммит `8c2c1da`). Политика `.gitignore` доведена отдельным планом
+> [consumers-drift-fidelity](consumers-drift-fidelity/README.md).
 
 ## Goal
 

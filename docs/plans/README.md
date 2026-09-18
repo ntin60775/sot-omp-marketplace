@@ -18,8 +18,7 @@ updated: 2026-09-18
   [#2](https://github.com/ntin60775/sot-omp-marketplace/pull/2))
 - [consumer-delivery.md](consumer-delivery.md) — поставка потребителям: реестр
   машины, `scripts/consumers.py` (check/upgrade/verify/migrate), снятие плоских
-  копий в шести проектах, хук ворктри — **active** (шаг 1 отгружен, шаг 2 — миграция
-  потребителей — ждёт подтверждения оператора)
+  копий, хук ворктри — **archived** (оба шага выполнены, шаг 2 закрыт 2026-09-18)
 - [marketplace-delivery](marketplace-delivery/README.md) — переезд OntoShip в формат
   плагина этого каталога; поставка обновлений через `/marketplace` — **archived**
   (подход заменён решением «доставка плагинами», не исполнять)
