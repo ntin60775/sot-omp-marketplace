@@ -2,11 +2,16 @@
 node_type: ticket
 title: Материализация и непроверяемые плагины в отчёте о дрейфе
 service: _platform
-status: active
+status: archived
 updated: 2026-09-18
 links:
   part_of: [README.md]
+  implemented_by: [../../../scripts/consumers.py, ../../../tests/test_consumers.py]
 ---
+
+> **Отгружен 2026-09-18**, MR [#1](https://github.com/ntin60775/sot-omp-marketplace/pull/1),
+> коммиты `aaa4041` (правка) и `a428044` (самопроверка: разошедшееся дерево и границы
+> проверки). Все критерии приёмки закрыты, доказательства — в описании MR.
 
 # 01: Материализация и непроверяемые плагины
 

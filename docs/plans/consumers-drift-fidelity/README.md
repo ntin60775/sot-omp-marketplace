@@ -80,5 +80,6 @@ links:
 
 ## Тикеты
 
-- [01 — Материализация и непроверяемые плагины](01-materialization-and-unversioned.md)
-- [02 — Политика проектных sticky-файлов](02-policy-project-sticky-files.md)
+- [01 — Материализация и непроверяемые плагины](01-materialization-and-unversioned.md) —
+  **archived** (MR [#1](https://github.com/ntin60775/sot-omp-marketplace/pull/1), 2026-09-18)
+- [02 — Политика проектных sticky-файлов](02-policy-project-sticky-files.md) — следующий ран
