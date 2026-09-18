@@ -56,6 +56,17 @@ REQUIRED_IGNORES = (
     ".artifacts/",
 )
 
+# Scope установки omp. Кэш пакетов у него один (`~/.omp/plugins/cache/plugins`),
+# а `node_modules` свой у каждого корня: проектный плагин линкуется в проект,
+# машинный — в `~`. Имена совпадают со значениями `--scope=` у omp.
+PROJECT_SCOPE = "project"
+USER_SCOPE = "user"
+
+# Мягкие виды дрейфа не делают гейт красным: `pinned` — сознательный выбор проекта,
+# `own-rules` — свои файлы под неплагинными именами, `unversioned` — каталог плагин
+# знает, но версии не объявил: обновлять нечего, и это не поломка поставки.
+SOFT_KINDS = ("pinned", "own-rules", "unversioned")
+
 EXIT_OK = 0
 EXIT_DRIFT = 1
 EXIT_USAGE = 2
@@ -349,8 +360,87 @@ def uncovered_ignores(project: Path) -> list[str]:
             if not any(_covers(pattern, required) for pattern in patterns)]
 
 
+def plugin_roots(project: Path) -> dict[str, Path]:
+    """Корни `node_modules` по scope — где искать линки на поставленные пакеты."""
+    return {PROJECT_SCOPE: project / ".omp" / "plugins" / "node_modules",
+            USER_SCOPE: Path.home() / ".omp" / "plugins" / "node_modules"}
+
+
+def _node_modules_state(root: Path) -> tuple[set[str], list[dict]]:
+    """Записи `node_modules`: разрешённые цели и битые симлинки.
+
+    Сопоставление идёт по **цели**, а не по имени: имени пакета в `omp plugin list
+    --json` нет (поля только `id`, `scope`, `installPath`, `version`, …), и оно же
+    не обязано совпадать с именем плагина (`1c` ставится пакетом `1c-omp`).
+    """
+    resolved: set[str] = set()
+    broken: list[dict] = []
+    if not root.is_dir():
+        return resolved, broken
+    for entry in root.iterdir():
+        if entry.is_symlink():
+            target = os.readlink(entry)
+            if entry.exists():
+                resolved.add(str(entry.resolve()))
+            else:
+                # `resolve()` нестрогий: у битого симлинка он даёт мёртвую цель,
+                # по ней запись и сопоставляется с `installPath` наблюдаемого плагина.
+                broken.append({"path": str(entry), "target": target,
+                               "resolved": str(entry.resolve())})
+            continue
+        resolved.add(str(entry.resolve()))
+    return resolved, broken
+
+
+def _materialization(project: Path, plugins: dict) -> list[dict]:
+    """Достижим ли payload у каждого наблюдаемого плагина — в обоих корнях установки.
+
+    `omp plugin list --json` — реестр установки, а не поставка: плагин может быть
+    зарегистрирован, а payload — недоступен. Видно это тремя состояниями: мёртвый
+    `installPath` (кэш снесён), отсутствующая запись в `node_modules` (плагин
+    зарегистрирован, а линка нет) и битый симлинк. 2026-09-17 `retail` стоял именно
+    с битым симлинком `node_modules/unica`, а `check` показывал «чисто»: он читал
+    реестр маркетплейса, а не материализацию.
+
+    Одна поломка — одна строка: если `installPath` плагина и есть цель битого
+    симлинка, называет её строка симлинка (в ней есть и запись, и цель).
+    """
+    findings: list[dict] = []
+    roots = plugin_roots(project)
+    expected: dict[str, list[tuple[str, str | None]]] = {name: [] for name in roots}
+    for plugin_id, installed in sorted(plugins.items()):
+        scope = installed.get("scope") or PROJECT_SCOPE
+        root_name = scope if scope in roots else PROJECT_SCOPE
+        expected[root_name].append((plugin_id, installed.get("installPath")))
+
+    for root_name, root in roots.items():
+        resolved, broken = _node_modules_state(root)
+        dead = {item["resolved"]: item for item in broken}
+        by_install = {str(Path(path).resolve()): plugin_id
+                      for plugin_id, path in expected[root_name] if path}
+        for plugin_id, install in expected[root_name]:
+            if not install:
+                findings.append({"plugin": plugin_id, "path": None, "target": None,
+                                 "scope": root_name, "why": "installPath не назван"})
+                continue
+            resolved_install = str(Path(install).resolve())
+            if resolved_install in dead:
+                continue  # называет строка битого симлинка ниже
+            if not Path(install).exists():
+                findings.append({"plugin": plugin_id, "path": install, "target": None,
+                                 "scope": root_name, "why": "installPath не существует"})
+                continue
+            if resolved_install not in resolved:
+                findings.append({"plugin": plugin_id, "path": install, "target": None,
+                                 "scope": root_name, "why": "нет записи в node_modules"})
+        for item in broken:
+            findings.append({"plugin": by_install.get(item["resolved"]), "path": item["path"],
+                             "target": item["target"], "scope": root_name, "why": "битый симлинк"})
+    return findings
+
+
 def observe(project: Path) -> dict:
-    """Живое наблюдение проекта: плагины, копии пакета, свои файлы, шаг инициализации ворктри.
+    """Живое наблюдение проекта: плагины, их материализация, копии пакета, свои файлы, хук ворктри.
 
     Различаются два разных состояния под `.omp/<dir>`:
     - `shadowing` — файл, чей путь есть в поставленном пакете: он перекрывает плагинное
@@ -358,6 +448,9 @@ def observe(project: Path) -> dict:
     - `project_own` — файл, которого нет ни в одном пакете: это собственное знание
       проекта (ADR plugin-delivery: проектная конкретика живёт в проекте под именем,
       не совпадающим с плагинным) — снимать его нельзя.
+
+    `materialization` — обратная сторона `plugins`: реестр установки говорит, что
+    плагин есть, а диск может говорить другое (см. `_materialization`).
     """
     if not (project / ".omp").is_dir():
         raise UsageError(f"нет .omp/ — это не потребитель: {project}")
@@ -404,6 +497,7 @@ def observe(project: Path) -> dict:
 
     return {
         "plugins": plugins,
+        "materialization": _materialization(project, plugins),
         "flat": flat,
         "shadowing": shadowing,
         "project_own": project_own,
@@ -446,15 +540,21 @@ def catalog_versions(catalog_name: str, marketplaces: dict[str, str]) -> dict[st
     return {plugin["name"]: plugin.get("version") for plugin in catalog.get("plugins", [])}
 
 
-def catalog_versions_for(ids: set[str], marketplaces: dict[str, str]) -> dict[str, str | None]:
-    """Версия каталога для каждого id `<плагин>@<каталог>` (каталог может быть чужим)."""
+def catalog_versions_for(ids: set[str], marketplaces: dict[str, str]) -> dict[str, dict]:
+    """Что каталог знает о каждом id `<плагин>@<каталог>` (каталог может быть чужим).
+
+    `known` — плагин в каталоге есть, `version` — объявленная им версия. Запись без
+    версии — не «плагина нет»: это `unversioned`, и текст с лечением у него другой.
+    """
     cache: dict[str, dict[str, str]] = {}
-    out: dict[str, str | None] = {}
+    out: dict[str, dict] = {}
     for plugin_id in ids:
         plugin, _, marketplace = plugin_id.partition("@")
         if marketplace not in cache:
             cache[marketplace] = catalog_versions(marketplace, marketplaces)
-        out[plugin_id] = cache[marketplace].get(plugin)
+        known = plugin in cache[marketplace]
+        out[plugin_id] = {"known": known,
+                          "version": cache[marketplace].get(plugin) if known else None}
     return out
 
 
@@ -471,7 +571,45 @@ def catalog_reason(plugin_id: str, marketplaces: dict[str, str]) -> str:
 # ------------------------------------------------------------------------ дрейф
 
 
-def drift_for(consumer: dict, observed: dict, wanted: dict[str, str | None],
+def _catalog_gap_drift(plugin_id: str, target: dict | None, installed: str | None,
+                       marketplaces: dict[str, str]) -> dict | None:
+    """Запись каталога не даёт версии — и почему именно.
+
+    `unknown` (жёсткий) — каталог плагина не знает: опечатка в id, незарегистрированный
+    маркетплейс, пустой кэш. `unversioned` (мягкий) — каталог плагин знает, но версии
+    не объявил: обновлять нечего, и это не поломка поставки. Один текст на оба случая
+    («плагина нет в каталоге») врал бы в обоих направлениях.
+    """
+    if not target or not target["known"]:
+        return {"kind": "unknown", "plugin": plugin_id, "installed": installed,
+                "detail": catalog_reason(plugin_id, marketplaces)}
+    if target["version"] is None:
+        return {"kind": "unversioned", "plugin": plugin_id, "installed": installed,
+                "detail": f"каталог {plugin_id.partition('@')[2]} не объявляет версию — "
+                          f"обновлять нечего"}
+    return None
+
+
+def _materialization_detail(finding: dict) -> str:
+    """Строка отчёта о поломке материализации: путь, цель симлинка и лечение.
+
+    Лечение — то же, что в runbook: `omp plugin upgrade <id>@<каталог> --scope=…`
+    в затронутом проекте; scope — корень, в котором поломка нашлась.
+    """
+    plugin, scope, why = finding["plugin"], finding["scope"], finding["why"]
+    fix = (f" — omp plugin upgrade {plugin} --scope={scope}" if plugin
+           else f" — перепривязать: omp plugin upgrade <id>@<каталог> --scope={scope}")
+    if why == "installPath не назван":
+        return f"omp не назвал installPath — проверить поставку нечем{fix}"
+    if why == "installPath не существует":
+        return f"installPath не существует: {finding['path']}{fix}"
+    if why == "нет записи в node_modules":
+        return f"в node_modules нет записи, ведущей на installPath: {finding['path']}{fix}"
+    named = f" (плагин {plugin})" if plugin else ""
+    return f"битый симлинк: {finding['path']} → {finding['target']}{named}{fix}"
+
+
+def drift_for(consumer: dict, observed: dict, wanted: dict[str, dict],
               marketplaces: dict[str, str]) -> list[dict]:
     drifts: list[dict] = []
     for entry in consumer["plugins"]:
@@ -487,7 +625,7 @@ def drift_for(consumer: dict, observed: dict, wanted: dict[str, str | None],
                                "detail": f"закреплён {pin}, а плагин не поставлен — пин нарушен"})
             else:
                 drifts.append({"kind": "missing", "plugin": plugin_id, "installed": None,
-                               "detail": f"не поставлен (нужен {target or '?'})"})
+                               "detail": f"не поставлен (нужен {(target or {}).get('version') or '?'})"})
             continue
 
         version = installed["version"]
@@ -495,27 +633,35 @@ def drift_for(consumer: dict, observed: dict, wanted: dict[str, str | None],
             drifts.append({"kind": "stale", "plugin": plugin_id, "installed": version,
                            "detail": f"закреплён {pin}, а стоит {version}"})
             continue
+
+        gap = _catalog_gap_drift(plugin_id, target, version, marketplaces)
         if pin:
-            if target is None:
-                drifts.append({"kind": "unknown", "plugin": plugin_id, "installed": version,
-                               "detail": catalog_reason(plugin_id, marketplaces)})
-            elif pin != target:
+            if gap:
+                drifts.append(gap)
+            elif pin != target["version"]:
                 drifts.append({"kind": "pinned", "plugin": plugin_id, "installed": version,
-                               "detail": f"закреплён {pin}, в каталоге {target} — обновление пропускается"})
+                               "detail": f"закреплён {pin}, в каталоге {target['version']} — "
+                                         f"обновление пропускается"})
             continue
 
-        if target is None:
-            drifts.append({"kind": "unknown", "plugin": plugin_id, "installed": version,
-                           "detail": catalog_reason(plugin_id, marketplaces)})
+        if gap:
+            drifts.append(gap)
             continue
 
         if installed["scope"] != entry["scope"]:
             drifts.append({"kind": "scope", "plugin": plugin_id, "installed": version,
                            "detail": f"стоит в {installed['scope']}-scope, ожидается {entry['scope']}"})
 
-        if version != target:
+        if version != target["version"]:
             drifts.append({"kind": "stale", "plugin": plugin_id, "installed": version,
-                           "detail": f"стоит {version}, в каталоге {target}"})
+                           "detail": f"стоит {version}, в каталоге {target['version']}"})
+
+    # Материализация — жёсткий вид и первая строка среди наблюдений: плагин,
+    # зарегистрированный без достижимого payload, не работает, чем бы ни был доволен
+    # реестр маркетплейса.
+    for finding in observed["materialization"]:
+        drifts.append({"kind": "materialization", "plugin": finding["plugin"], "installed": None,
+                       "detail": _materialization_detail(finding)})
 
     if observed["shadowing"]:
         shown = ", ".join(observed["shadowing"][:3])
@@ -557,9 +703,8 @@ def drift_for(consumer: dict, observed: dict, wanted: dict[str, str | None],
 
 
 def hard_drift(drifts: list[dict]) -> list[dict]:
-    """Мягкие виды не делают гейт красным: `pinned` — сознательный выбор,
-    `own-rules` — собственные файлы проекта под неплагинными именами."""
-    return [d for d in drifts if d["kind"] not in ("pinned", "own-rules")]
+    """Мягкие виды не делают гейт красным — их перечень один на весь инструмент."""
+    return [d for d in drifts if d["kind"] not in SOFT_KINDS]
 
 
 def safe_observe(project: Path) -> tuple[dict | None, str | None]:
@@ -723,12 +868,37 @@ def _record_exclusions(registry: dict, paths: list[str] | None) -> list[str]:
     return added
 
 
-def _adopt_candidates(registry: dict, args, found: list[str]) -> tuple[list[dict], list[dict]]:
+def _trackable(observed: dict, marketplaces: dict[str, str]) -> tuple[list[str], list[dict]]:
+    """Состав наблюдаемых плагинов, который реестр может отслеживать, и причина отказа.
+
+    Отслеживать можно только то, о чём каталог объявил версию: иначе `check` сразу
+    красный, а обновлять нечего. Так `project-bp` 2026-09-17 получил в состав
+    `redaktura-skills@redaktura-skills` — глобальный навык из чужого каталога без
+    объявленной версии, и запись пришлось снимать руками.
+
+    Плагин, которого каталог **не знает**, наоборот, остаётся в составе: это
+    `unknown` — настоящий дрейф (опечатка в id, незарегистрированный маркетплейс),
+    и прятать его от гейта значило бы терять сигнал.
+    """
+    wanted = catalog_versions_for(set(observed["plugins"]), marketplaces)
+    tracked, untracked = [], []
+    for plugin_id in sorted(observed["plugins"]):
+        target = wanted.get(plugin_id) or {"known": False, "version": None}
+        if target["known"] and target["version"] is None:
+            untracked.append({"id": plugin_id, "reason": "каталог не объявляет версию"})
+            continue
+        tracked.append(plugin_id)
+    return tracked, untracked
+
+
+def _adopt_candidates(registry: dict, args, found: list[str],
+                      marketplaces: dict[str, str]) -> tuple[list[dict], list[dict]]:
     """Принять кандидатов в реестр. Кандидат с именем не по схеме не принимается.
 
     Ожидаемый состав = наблюдаемый: «здесь стоит то, что стоит». Обратный выбор —
     записать пустой состав — оставил бы гейт зелёным при живом плагине, то есть
-    спрятал бы ровно то, от чего реестр и заводится.
+    спрятал бы ровно то, от чего реестр и заводится. Исключение — плагины, версии
+    которых каталог не объявил (`_trackable`): их в составе нет, а причина печатается.
     """
     candidates = found
     if args.only:
@@ -755,15 +925,16 @@ def _adopt_candidates(registry: dict, args, found: list[str]) -> tuple[list[dict
         if error:
             rejected.append({"path": path, "reason": error})
             continue
+        tracked, untracked = _trackable(observed, marketplaces)
         consumer = {
             "name": name,
             "path": path,
-            "plugins": [{"id": plugin_id, "scope": "project", "installed": None, "pin": None}
-                        for plugin_id in sorted(observed["plugins"])],
+            "plugins": [{"id": plugin_id, "scope": PROJECT_SCOPE, "installed": None, "pin": None}
+                        for plugin_id in tracked],
         }
         _record(registry, consumer, observed)
         registry["consumers"].append(consumer)
-        adopted.append({"name": name, "path": path, "plugins": sorted(observed["plugins"])})
+        adopted.append({"name": name, "path": path, "plugins": tracked, "untracked": untracked})
     return adopted, rejected
 
 
@@ -792,7 +963,8 @@ def cmd_discover(registry: dict, args) -> int:
         # Исключения применяются до принятия: путь, названный не-потребителем, не
         # должен попасть в реестр ни потребителем, ни кандидатом.
         excluded = _record_exclusions(registry, args.exclude)
-        adopted, rejected = _adopt_candidates(registry, args, unmanaged(registry))
+        adopted, rejected = _adopt_candidates(registry, args, unmanaged(registry),
+                                             load_marketplaces(args.marketplaces))
         registry["updated"] = utcnow()
         write_json(args.registry, registry)
         # Гейт считает по состоянию после принятия: исключённые кандидаты в него
@@ -817,6 +989,8 @@ def cmd_discover(registry: dict, args) -> int:
     if args.apply:
         for row in adopted:
             print(f"  + принят: {row['name']:<20} {', '.join(row['plugins']) or 'плагинов нет'}")
+            for item in row["untracked"]:
+                print(f"      · не отслеживается: {item['reason']} ({item['id']})")
         for path in excluded:
             print(f"  − исключён: {path}")
         for row in rejected:
@@ -886,7 +1060,7 @@ def cmd_check(registry: dict, args) -> int:
                 print(f"  ✓ {row['name']:<22} чисто")
                 continue
             for drift in row["drifts"]:
-                mark = "•" if drift["kind"] in ("pinned", "own-rules") else "✗"
+                mark = "•" if drift["kind"] in SOFT_KINDS else "✗"
                 target = f"{drift['plugin']}: " if drift["plugin"] else ""
                 print(f"  {mark} {row['name']:<22} {drift['kind']:<13} {target}{drift['detail']}")
         if found:
@@ -915,12 +1089,16 @@ def _upgrade_plan(registry: dict, args) -> tuple[list[dict], list[dict]]:
             installed = observed["plugins"].get(plugin_id)
             if entry.get("pin"):
                 continue
-            if wanted.get(plugin_id) is None:
-                # Ставить нечего: каталог не знает такого плагина (опечатка в id
-                # или незарегистрированный маркетплейс) — это видно как `unknown` в check.
+            gap = _catalog_gap_drift(plugin_id, wanted.get(plugin_id),
+                                     installed["version"] if installed else None, marketplaces)
+            if gap:
+                # Ставить нечего: `unknown` — каталог плагина не знает (опечатка в id,
+                # незарегистрированный маркетплейс), `unversioned` — знает, но версии
+                # не объявил. Первый красит прогон, второй мягкий: обновлять нечего.
                 skipped.append({"name": consumer["name"], "plugin": plugin_id,
-                                "reason": catalog_reason(plugin_id, marketplaces)})
+                                "reason": gap["detail"], "soft": gap["kind"] == "unversioned"})
                 continue
+            target = wanted[plugin_id]["version"]
             # Плоские копии установке не мешают: копия перекрывает плагин (нативный
             # провайдер), поведение проекта не меняется, пока копии на месте. Зато
             # поставленный пакет даёт migrate эталон для классификации файлов.
@@ -929,20 +1107,26 @@ def _upgrade_plan(registry: dict, args) -> tuple[list[dict], list[dict]]:
             over_copies = bool(observed["shadowing"])
             if installed is None:
                 actions.append({"name": consumer["name"], "path": str(project), "plugin": plugin_id,
-                                "action": "install", "from": None, "to": wanted[plugin_id],
+                                "action": "install", "from": None, "to": target,
                                 "over_copies": over_copies})
                 continue
-            if installed["scope"] != entry["scope"] or installed["version"] != wanted[plugin_id]:
+            if installed["scope"] != entry["scope"] or installed["version"] != target:
                 actions.append({"name": consumer["name"], "path": str(project), "plugin": plugin_id,
-                                "action": "upgrade", "from": installed["version"], "to": wanted[plugin_id],
+                                "action": "upgrade", "from": installed["version"], "to": target,
                                 "over_copies": over_copies})
     return actions, skipped
 
 
 def _print_skipped(skipped: list[dict]) -> None:
     for row in skipped:
+        mark = "•" if row.get("soft") else "!"
         plugin = f"{row['plugin']}: " if row.get("plugin") else ""
-        print(f"  ! {row['name']:<22} {plugin}{row['reason']}")
+        print(f"  {mark} {row['name']:<22} {plugin}{row['reason']}")
+
+
+def _hard_skips(skipped: list[dict]) -> list[dict]:
+    """Пропуски, из-за которых прогон красный: мягкие (нечего обновлять) — не повод."""
+    return [row for row in skipped if not row.get("soft")]
 
 
 def cmd_upgrade(registry: dict, args) -> int:
@@ -955,7 +1139,7 @@ def cmd_upgrade(registry: dict, args) -> int:
         else:
             _print_skipped(skipped)
             print("Обновлять нечего.")
-        return EXIT_DRIFT if skipped else EXIT_OK
+        return EXIT_DRIFT if _hard_skips(skipped) else EXIT_OK
 
     if args.dry_run:
         if args.json:
@@ -968,7 +1152,7 @@ def cmd_upgrade(registry: dict, args) -> int:
             _print_skipped(skipped)
             print(f"\n--dry-run: план из {len(actions)} действий, ничего не выполнено.")
         # План — тоже гейт: недоступный потребитель делает его красным, как и применение.
-        return EXIT_DRIFT if skipped else EXIT_OK
+        return EXIT_DRIFT if _hard_skips(skipped) else EXIT_OK
 
     if not args.yes:
         print("Нужен --yes для применения (или --dry-run для плана).", file=sys.stderr)
@@ -1026,9 +1210,9 @@ def cmd_upgrade(registry: dict, args) -> int:
         failed_actions = sum(1 for row in results if not row["ok"])
         print(f"\nвыполнено: {len(results) - failed_actions} · провалов: {failed_actions}")
         if skipped:
-            print(f"пропущено потребителей: {len(skipped)} (см. строки «!» выше)")
+            print(f"пропущено: {len(skipped)} (см. строки «!» и «•» выше)")
     # Недоступный потребитель — тот же дрейф, что и в check: гейт не должен быть зелёным.
-    return EXIT_DRIFT if (failed_names or skipped) else EXIT_OK
+    return EXIT_DRIFT if (failed_names or _hard_skips(skipped)) else EXIT_OK
 
 
 def cmd_verify(registry: dict, args) -> int:
