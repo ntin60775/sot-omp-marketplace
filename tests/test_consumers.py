@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -18,6 +19,17 @@ TOOL = Path(__file__).resolve().parent.parent / "scripts" / "consumers.py"
 REPO = Path(__file__).resolve().parent.parent
 CATALOG = "sot-omp-marketplace"
 LAYOUT_DOC = REPO / "docs" / "reference" / "consumer-repo-layout.md"
+
+# Имя пакета в `node_modules` не совпадает с именем плагина: `1c` ставится пакетом
+# `1c-omp` (живая машина). Инструмент сопоставляет записи с плагинами по цели
+# симлинка, поэтому расхождение держится в фикстуре: проверка «по имени» прошла бы
+# здесь и упала на живой машине.
+PACKAGE_NAMES = {"1c": "1c-omp"}
+
+
+def package_name(plugin_id: str) -> str:
+    plugin = plugin_id.partition("@")[0]
+    return PACKAGE_NAMES.get(plugin, plugin)
 
 
 def documented_ignores() -> list[str]:
@@ -98,13 +110,22 @@ class Machine:
         omp.chmod(0o755)
         self.log = root / "omp.log"
         self.log.write_text("", encoding="utf-8")
+        # Машинный (`user`) корень установки: у инструмента это `~/.omp/plugins`, и
+        # HOME подменяется, чтобы тест не заглядывал в настоящий. Домашний каталог —
+        # сосед корня, а не его подкаталог: на живой машине `~` не входит в корни
+        # поиска, иначе `~/.omp/` сам выглядел бы потребителем.
+        self.home = root.parent / f"{root.name}-home"
+        self.home.mkdir()
 
         self.catalog = root / "catalog.json"
         self.catalog.write_text(json.dumps({
             "name": CATALOG,
             "metadata": {"version": "0.3.1"},
             "plugins": [{"name": "ontoship", "version": "0.4.0"},
-                        {"name": "1c", "version": "0.1.2"}],
+                        {"name": "1c", "version": "0.1.2"},
+                        # Каталог плагин знает, а версии не объявил — так выглядит
+                        # `redaktura-skills@redaktura-skills` (2026-09-17).
+                        {"name": "skill-only", "description": "навык без версии"}],
         }), encoding="utf-8")
         self.marketplaces = root / "marketplaces.json"
         self.catalog_unica = root / "catalog-unica.json"
@@ -152,10 +173,46 @@ class Machine:
             {"id": plugin, "scope": scope, "entries": [entry]}
             for (plugin, scope, _), entry in zip(plugins, entries)
         ]}
-        for plugin, _, version in plugins:
-            (self.root / "cache" / f"{plugin}-{version}").mkdir(parents=True, exist_ok=True)
+        for plugin, scope, version in plugins:
+            install = self.root / "cache" / f"{plugin}-{version}"
+            install.mkdir(parents=True, exist_ok=True)
+            self.link(plugin, scope, path).symlink_to(install)
         self.world_file.write_text(json.dumps(self.world), encoding="utf-8")
         return path
+
+    def link_root(self, scope: str, project: Path) -> Path:
+        """Корень `node_modules`: проектный плагин линкуется в проект, машинный — в `~`."""
+        if scope == "user":
+            return self.home / ".omp" / "plugins" / "node_modules"
+        return project / ".omp" / "plugins" / "node_modules"
+
+    def link(self, plugin: str, scope: str, project: Path) -> Path:
+        """Запись `node_modules` для плагина — по имени пакета, а не по id."""
+        root = self.link_root(scope, project)
+        root.mkdir(parents=True, exist_ok=True)
+        return root / package_name(plugin)
+
+    def break_link(self, plugin: str, project: Path, scope: str = "project") -> Path:
+        """Запись ведёт на снесённый кэш — состояние `retail` 2026-09-17."""
+        link = self.link(plugin, scope, project)
+        link.unlink()
+        link.symlink_to(str(self.root / "cache" / f"снесено-{package_name(plugin)}"))
+        return link
+
+    def drop_link(self, plugin: str, project: Path, scope: str = "project") -> None:
+        """Запись убрана: плагин зарегистрирован, а линка на пакет нет."""
+        self.link(plugin, scope, project).unlink()
+
+    def kill_install(self, plugin: str, version: str) -> None:
+        """Кэш пакета снесён: `installPath` в реестре установки остался, диска нет."""
+        shutil.rmtree(self.root / "cache" / f"{plugin}-{version}")
+
+    def forget_install_path(self, project: Path, plugin_id: str) -> None:
+        """omp не назвал путь пакета: проверять поставку нечем."""
+        for entry in self.world[str(project)]["marketplace"]:
+            if entry["id"] == plugin_id:
+                entry["entries"][0].pop("installPath")
+        self.world_file.write_text(json.dumps(self.world), encoding="utf-8")
 
     def package_file(self, plugin: str, version: str, relative: str, content: str) -> None:
         """Файл внутри поставленного пакета — эталон для классификации плоских копий."""
@@ -201,6 +258,9 @@ class Machine:
             "PATH": f"{self.bin}{os.pathsep}{os.environ['PATH']}",
             "FAKE_OMP_LOG": str(self.log),
             "FAKE_OMP_WORLD": str(self.world_file),
+            # Машинный корень установки инструмент берёт из `~`: без подмены HOME
+            # тест смотрел бы в настоящий `~/.omp/plugins` оператора.
+            "HOME": str(self.home),
         }
         if fail_mutations:
             env["FAKE_OMP_FAIL"] = "1"
@@ -1266,3 +1326,224 @@ def test_gitignore_glob_does_not_cross_segments(machine: Machine) -> None:
 
     ignores = json.loads(result.stdout)["consumers"][0]["drifts"][0]["ignores"]
     assert ignores == [".scratch/"], "`.omp/*` накрывает `.omp/plugins/`, `.omp/mcp.json` и прочее"
+
+
+# ------------------------------------------------------- материализация поставки
+
+
+def test_broken_node_modules_symlink_is_materialization(machine: Machine) -> None:
+    """Реестр установки говорит «плагин есть», а симлинк ведёт в пустоту.
+
+    Живой случай 2026-09-17: `retail` стоял с `node_modules/unica → …/unica___unica___0.11.0`,
+    и `check` показывал «чисто» — он читал реестр маркетплейса, а не материализацию.
+    """
+    path = machine.project("retail", [("unica@unica", "project", "0.12.3")])
+    machine.consumer("retail", path, [("unica@unica", "project", "0.12.3")])
+    link = machine.break_link("unica@unica", path)
+
+    result = machine.run(machine.write_registry(), "check", "--json")
+
+    assert result.returncode == 1
+    drifts = json.loads(result.stdout)["consumers"][0]["drifts"]
+    broken = [d for d in drifts if d["kind"] == "materialization" and "битый симлинк" in d["detail"]]
+    assert len(broken) == 1, drifts
+    assert str(link) in broken[0]["detail"] and "снесено-unica" in broken[0]["detail"], \
+        "видно и запись, и её цель"
+    assert "omp plugin upgrade <id>@<каталог> --scope=project" in broken[0]["detail"], \
+        "цель ни на один наблюдаемый плагин не ведёт — названо лечение из runbook, без id"
+
+
+def test_missing_node_modules_entry_is_materialization(machine: Machine) -> None:
+    """Плагин зарегистрирован, а записи в `node_modules` нет — payload недостижим."""
+    install = machine.root / "cache" / "ontoship@sot-omp-marketplace-0.4.0"
+    path = machine.project("unlinked", [("ontoship@sot-omp-marketplace", "project", "0.4.0")])
+    machine.consumer("unlinked", path, [("ontoship@sot-omp-marketplace", "project", "0.4.0")])
+    machine.drop_link("ontoship@sot-omp-marketplace", path)
+
+    result = machine.run(machine.write_registry(), "check", "--json")
+
+    assert result.returncode == 1
+    drift = json.loads(result.stdout)["consumers"][0]["drifts"][0]
+    assert drift["kind"] == "materialization"
+    assert "нет записи" in drift["detail"] and str(install) in drift["detail"]
+
+
+def test_dead_install_path_is_materialization(machine: Machine) -> None:
+    """Кэш снесён, линка нет: `installPath` из реестра установки не существует."""
+    path = machine.project("wiped", [("ontoship@sot-omp-marketplace", "project", "0.4.0")])
+    machine.consumer("wiped", path, [("ontoship@sot-omp-marketplace", "project", "0.4.0")])
+    machine.kill_install("ontoship@sot-omp-marketplace", "0.4.0")
+    machine.drop_link("ontoship@sot-omp-marketplace", path)
+
+    result = machine.run(machine.write_registry(), "check", "--json")
+
+    assert result.returncode == 1
+    drift = json.loads(result.stdout)["consumers"][0]["drifts"][0]
+    assert drift["kind"] == "materialization"
+    assert "installPath не существует" in drift["detail"]
+
+
+def test_one_breakage_is_reported_once(machine: Machine) -> None:
+    """Мёртвый `installPath` и битый симлинк на него — одна поломка, а не две строки."""
+    path = machine.project("wiped", [("ontoship@sot-omp-marketplace", "project", "0.4.0")])
+    machine.consumer("wiped", path, [("ontoship@sot-omp-marketplace", "project", "0.4.0")])
+    machine.kill_install("ontoship@sot-omp-marketplace", "0.4.0")
+
+    result = machine.run(machine.write_registry(), "check", "--json")
+
+    drifts = json.loads(result.stdout)["consumers"][0]["drifts"]
+    assert [d["kind"] for d in drifts] == ["materialization"]
+    assert "битый симлинк" in drifts[0]["detail"]
+    assert "omp plugin upgrade ontoship@sot-omp-marketplace --scope=project" in drifts[0]["detail"], \
+        "цель ведёт на installPath наблюдаемого плагина — лечение названо с id"
+
+
+def test_materialization_reports_a_plugin_without_an_install_path(machine: Machine) -> None:
+    """omp не назвал путь пакета — проверить поставку нечем, и молчать об этом нельзя."""
+    path = machine.project("nameless", [("ontoship@sot-omp-marketplace", "project", "0.4.0")])
+    machine.consumer("nameless", path, [("ontoship@sot-omp-marketplace", "project", "0.4.0")])
+    machine.forget_install_path(path, "ontoship@sot-omp-marketplace")
+
+    result = machine.run(machine.write_registry(), "check", "--json")
+
+    assert result.returncode == 1
+    drift = json.loads(result.stdout)["consumers"][0]["drifts"][0]
+    assert drift["kind"] == "materialization"
+    assert "не назвал installPath" in drift["detail"]
+
+
+def test_materialization_matches_the_link_by_target_not_by_name(machine: Machine) -> None:
+    """Пакет `1c-omp` ставит плагин `1c`: имя записи в `node_modules` не совпадает с id."""
+    path = machine.project("one-c", [("1c@sot-omp-marketplace", "project", "0.1.2")])
+    machine.consumer("one-c", path, [("1c@sot-omp-marketplace", "project", "0.1.2")])
+
+    result = machine.run(machine.write_registry(), "check")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (path / ".omp" / "plugins" / "node_modules" / "1c-omp").is_symlink()
+
+
+def test_materialization_checks_the_user_scope_root(machine: Machine) -> None:
+    """Машинная установка линкуется в `~`, а не в проект: проверяются оба корня."""
+    path = machine.project("wide", [("ontoship@sot-omp-marketplace", "user", "0.4.0")])
+    machine.consumer("wide", path, [("ontoship@sot-omp-marketplace", "user", "0.4.0")])
+    link = machine.break_link("ontoship@sot-omp-marketplace", path, scope="user")
+
+    result = machine.run(machine.write_registry(), "check", "--json")
+
+    assert result.returncode == 1
+    drifts = json.loads(result.stdout)["consumers"][0]["drifts"]
+    broken = [d for d in drifts if d["kind"] == "materialization" and "битый симлинк" in d["detail"]]
+    assert len(broken) == 1, drifts
+    assert str(link) in broken[0]["detail"], "поломка названа в машинном корне"
+    assert "--scope=user" in broken[0]["detail"], "лечение — в том корне, где поломка"
+
+
+def test_restoring_the_link_clears_the_materialization_drift(machine: Machine) -> None:
+    """Инцидент `retail` целиком: битая цель краснеет, возврат цели — снова зелёно."""
+    path = machine.project("retail", [("unica@unica", "project", "0.12.3")])
+    machine.consumer("retail", path, [("unica@unica", "project", "0.12.3")])
+    registry = machine.write_registry()
+    assert machine.run(registry, "check").returncode == 0, "до поломки чисто"
+
+    link = machine.break_link("unica@unica", path)
+    broken = machine.run(registry, "check")
+    assert broken.returncode == 1 and "битый симлинк" in broken.stdout
+
+    link.unlink()
+    link.symlink_to(machine.root / "cache" / "unica@unica-0.12.3")
+    assert machine.run(registry, "check").returncode == 0, "цель вернулась — дрейф ушёл"
+
+
+# ------------------------------------------- непроверяемый плагин: unversioned
+
+
+def test_unversioned_catalog_entry_is_soft_drift(machine: Machine) -> None:
+    """Каталог плагин знает, а версии не объявил: обновлять нечего — гейт не красный.
+
+    Живой случай: `redaktura-skills@redaktura-skills` — глобальный навык чужого
+    каталога без объявленной версии; `unknown` говорил про него неправду.
+    """
+    path = machine.project("skills", [("skill-only@sot-omp-marketplace", "project", "0.4.0")])
+    machine.consumer("skills", path, [("skill-only@sot-omp-marketplace", "project", "0.4.0")])
+
+    result = machine.run(machine.write_registry(), "check")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "• skills" in result.stdout and "unversioned" in result.stdout, "мягкий вид — не крест"
+    assert "не объявляет версию" in result.stdout
+    assert "нет в каталоге" not in result.stdout, "текст `unknown` здесь был бы неправдой"
+
+
+def test_upgrade_does_not_go_red_on_an_unversioned_plugin(machine: Machine) -> None:
+    """Обновлять нечего — это не провал: мягкий пропуск виден, но гейт зелёный."""
+    path = machine.project("skills", [("skill-only@sot-omp-marketplace", "project", "0.4.0")])
+    machine.consumer("skills", path, [("skill-only@sot-omp-marketplace", "project", "0.4.0")])
+
+    result = machine.run(machine.write_registry(), "upgrade", "--dry-run")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "• skills" in result.stdout and "не объявляет версию" in result.stdout
+    assert machine.mutations() == [], "план ничего не выполняет"
+
+
+def test_upgrade_stays_red_when_the_catalog_does_not_know_the_plugin(machine: Machine) -> None:
+    """Незнакомый каталогу плагин — жёсткий пропуск: прогон красный, причина названа."""
+    path = machine.project("typo", [("ontoship@unica", "project", "0.4.0")])
+    machine.consumer("typo", path, [("ontoship@unica", "project", "0.4.0")])
+
+    result = machine.run(machine.write_registry(), "upgrade", "--dry-run")
+
+    assert result.returncode == 1
+    assert "нет в каталоге unica" in result.stdout
+
+
+def test_upgrade_apply_is_green_when_only_a_soft_skip_remains(machine: Machine) -> None:
+    """Применение с мягким пропуском: действия выполнены, гейт зелёный."""
+    path = machine.project("mixed", [("ontoship@sot-omp-marketplace", "project", "0.3.0"),
+                                     ("skill-only@sot-omp-marketplace", "project", "0.4.0")])
+    machine.consumer("mixed", path, [("ontoship@sot-omp-marketplace", "project", "0.3.0"),
+                                     ("skill-only@sot-omp-marketplace", "project", "0.4.0")])
+
+    result = machine.run(machine.write_registry(), "upgrade", "--yes")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "•" in result.stdout and "не объявляет версию" in result.stdout
+    assert any("plugin upgrade ontoship@sot-omp-marketplace" in call for call in machine.mutations()), \
+        "обновляемое обновлено, пропущено только непроверяемое"
+
+
+def test_discover_apply_does_not_adopt_an_unversioned_plugin(machine: Machine) -> None:
+    """Принятие не вносит в состав плагин без версии — иначе гейт сразу красный.
+
+    Живой случай 2026-09-17: `discover --apply` для `project-bp` внёс
+    `redaktura-skills@redaktura-skills`, и запись пришлось снимать руками.
+    """
+    machine.project("bp", [("ontoship@sot-omp-marketplace", "project", "0.4.0"),
+                           ("skill-only@sot-omp-marketplace", "user", "0.4.0")])
+    fresh = machine.root / "fresh.json"
+    machine.run(fresh, "init", "--root", str(machine.root))
+
+    result = machine.run(fresh, "discover", "--apply")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "не отслеживается: каталог не объявляет версию (skill-only@sot-omp-marketplace)" \
+        in result.stdout
+    consumer = json.loads(fresh.read_text(encoding="utf-8"))["consumers"][0]
+    assert [p["id"] for p in consumer["plugins"]] == ["ontoship@sot-omp-marketplace"]
+    check = machine.run(fresh, "check")
+    assert check.returncode == 0, check.stdout + check.stderr
+
+
+def test_discover_apply_keeps_a_plugin_the_catalog_does_not_know(machine: Machine) -> None:
+    """Незнакомый каталогу плагин остаётся в составе: это сигнал (`unknown`), а не шум."""
+    machine.project("typo", [("ontoship@unica", "project", "0.4.0")])
+    fresh = machine.root / "fresh.json"
+    machine.run(fresh, "init", "--root", str(machine.root))
+
+    result = machine.run(fresh, "discover", "--apply")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    consumer = json.loads(fresh.read_text(encoding="utf-8"))["consumers"][0]
+    assert [p["id"] for p in consumer["plugins"]] == ["ontoship@unica"]
+    assert machine.run(fresh, "check").returncode == 1, "id или каталог надо чинить — гейт красный"

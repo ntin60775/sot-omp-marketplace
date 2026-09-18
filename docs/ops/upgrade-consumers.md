@@ -117,9 +117,11 @@ git mv .omp/rules/test-contour.md .omp/rules/erp-main-test-contour.md   # при
 | Симптом | Причина | Что делать |
 |---|---|---|
 | дрейф `scope` | плагин стоит в `user`-scope | `upgrade --yes` переставит в `project` |
+| дрейф `materialization` | реестр установки говорит «плагин есть», а payload недоступен: мёртвый `installPath` (кэш снесён), нет записи в `node_modules` или битый симлинк | `omp plugin upgrade <id>@<marketplace> --scope=project` в затронутом проекте — перепривязывает запись на живую версию (для машинной установки — тот же вызов с `--scope=user`). Строка отчёта называет путь записи и цель симлинка |
 | дрейф `legacy` держится | под плагинными именами лежат копии пакета | `migrate` (отчёт) → `migrate --apply`; расходящиеся копии — `--accept-divergent` или перенос под неплагинное имя |
 | дрейф `legacy-unverified` | под `.omp/<dir>` файлы есть, а пакетов нет — копия это или своё, не видно | сначала `upgrade --yes`, затем `migrate` |
 | дрейф `own-rules` (помечен `•`) | в проекте есть свои файлы под неплагинными именами | не дрейф: так и должно быть. Снять их можно только осознанно — `--accept-unique` |
+| дрейф `unversioned` (помечен `•`) | каталог плагин знает, а версии не объявил (так выглядит `redaktura-skills@redaktura-skills`) | не дрейф: обновлять нечего. `upgrade` такой плагин пропускает и остаётся зелёным; в состав потребителей его не вносит `discover --apply` |
 | `verify`: `deploy-check ⚠` | предупреждения (exit 2) — пакет работает | не провал; в строке ниже видно чего не хватает (обычно строки в `.gitignore`) |
 | `verify`: `deploy-check ✗` | критика (exit 1) | по тексту строки: чаще всего нет `AGENTS.md` — нужен `/init`; бывает мёртвый путь движка в payload |
 | `upgrade` «ничего не делает» | кэш каталога не обновлён | `check --refresh`, затем `upgrade --yes` |
@@ -130,7 +132,7 @@ git mv .omp/rules/test-contour.md .omp/rules/erp-main-test-contour.md   # при
 | дрейф `gitignore` | доставленное не игнорируется — попадёт в git | дополнить `.gitignore` каноническим блоком из [consumer-repo-layout](../reference/consumer-repo-layout.md); `upgrade` по нему ничего не делает |
 | `реестр не найден` (exit 2) | свежий клон / новая машина — `.consumers.json` отсутствует | `init` + `discover --apply` (шаг 0) |
 | `upgrade` падает: `Runtime package name "X" conflicts with installed package "X"` | в `<project>/.omp/plugins/omp-plugins.lock.json` осталась запись по **runtime-имени** пакета (`1c-omp` при плагине `1c`) от прежней установки — установщик видит её как «установленный пакет» | убрать запись плагина из `lock` → `omp plugin upgrade <id>@<marketplace> --scope=project`. Не помогают `--force`, `uninstall`, `doctor --fix` и удаление симлинка (проверено 2026-09-17 на omp 18.2.4: 6 проектов из 7) |
-| после апгрейда в других проектах `<project>/.omp/plugins/node_modules/<pkg>` — битый симлинк | первый апгрейд снёс общий кэш `~/.omp/plugins/cache/plugins/<каталог>___<плагин>___<старая версия>`, а симлинки остальных проектов смотрели на него | `omp plugin upgrade <id>@<marketplace> --scope=project` в каждом затронутом проекте — перепривязывает на живую версию. `check` этого не видит: он читает реестр маркетплейса, а не материализацию в `node_modules` |
+| после апгрейда в других проектах `<project>/.omp/plugins/node_modules/<pkg>` — битый симлинк | первый апгрейд снёс общий кэш `~/.omp/plugins/cache/plugins/<каталог>___<плагин>___<старая версия>`, а симлинки остальных проектов смотрели на него | `omp plugin upgrade <id>@<marketplace> --scope=project` в каждом затронутом проекте — перепривязывает на живую версию. `check` называет это дрейфом `materialization` (exit 1) с путём записи и её целью — раньше он показывал «чисто», потому что читал реестр маркетплейса, а не материализацию в `node_modules` |
 
 ## Ловушка: `--dry-run` у omp не dry-run
 
