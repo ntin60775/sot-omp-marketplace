@@ -41,13 +41,13 @@ REMOTE_RE = re.compile(r"[:/]([^/:]+/[^/]+?)(?:\.git)?$")
 # docs/reference/consumer-repo-layout.md, блок «Канонический блок для .gitignore».
 # Набор здесь, а не в документе, потому что проверяет его инструмент; тест сверяет
 # эту константу с блоком документа, поэтому расхождение кода и политики — провал.
+# Проектных `.omp/RULES.md` и `.omp/APPEND_SYSTEM.md` здесь нет намеренно: omp читает
+# их из `<cwd>/.omp/` как файлы проекта, а машинный слой живёт в `~/.omp/agent/`.
 REQUIRED_IGNORES = (
     ".omp/plugins/",
     ".omp/skills/",
     ".omp/commands/",
     ".omp/scripts/",
-    ".omp/RULES.md",
-    ".omp/APPEND_SYSTEM.md",
     ".omp/mcp.json",
     ".omp/.backup-*",
     ".gitmark/",

@@ -1277,6 +1277,48 @@ def test_check_lists_the_documented_ignores(machine: Machine) -> None:
     assert drift["ignores"] == DOCUMENTED_IGNORES
 
 
+def test_project_rules_and_append_system_are_versioned_not_ignored(machine: Machine) -> None:
+    """`.omp/RULES.md` и `.omp/APPEND_SYSTEM.md` — проектные файлы omp, не машинный слой.
+
+    Живой случай: `erp-demo` держит в `.omp/APPEND_SYSTEM.md` «Роль проекта» и
+    сознательно версионирует его — политика требовала обратного и красила гейт.
+    Машинный слой (`sot-omp-core`) в проекты не пишет: он в `~/.omp/agent/`.
+
+    Тест переживёт возврат этих строк в политику: тогда проект, который их
+    версионирует, покраснеет — и это будет видно здесь, а не только на машине.
+    """
+    versioned = [line for line in DOCUMENTED_IGNORES
+                 if line not in (".omp/RULES.md", ".omp/APPEND_SYSTEM.md")]
+    path = machine.project("own-role", gitignore="\n".join(versioned) + "\n")
+    machine.consumer("own-role", path, [])
+
+    result = machine.run(machine.write_registry(), "check")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_delivered_paths_still_red_the_gate(machine: Machine) -> None:
+    """Проектные sticky-файлы ушли из политики — доставленное и производное остались.
+
+    Проект закрывает только свои файлы: доставленное (`.omp/plugins/`, `.omp/mcp.json`)
+    и производное (`.gitmark/`) обязаны остаться требованием, иначе гейт потеряет
+    зубы ровно там, ради чего он заведён.
+    """
+    path = machine.project("slack", gitignore=(
+        ".omp/RULES.md\n.omp/APPEND_SYSTEM.md\n*-map.html\n.scratch/\n.artifacts/\n"))
+    machine.consumer("slack", path, [])
+
+    result = machine.run(machine.write_registry(), "check", "--json")
+
+    assert result.returncode == 1
+    drift = json.loads(result.stdout)["consumers"][0]["drifts"][0]
+    assert drift["kind"] == "gitignore"
+    assert {".omp/plugins/", ".omp/mcp.json", ".gitmark/"} <= set(drift["ignores"]), \
+        "доставленное и производное по-прежнему требуется закрывать"
+    assert not {".omp/RULES.md", ".omp/APPEND_SYSTEM.md"} & set(drift["ignores"]), \
+        "проектные sticky-файлы больше не требуются"
+
+
 def test_wholesale_omp_covers_delivered_but_not_derived(machine: Machine) -> None:
     """Огульное `.omp/` закрывает доставленное; производное KB — отдельные строки."""
     path = machine.project("wholesale", gitignore=".omp/\n")
