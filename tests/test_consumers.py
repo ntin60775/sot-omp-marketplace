@@ -1368,6 +1368,30 @@ def test_missing_node_modules_entry_is_materialization(machine: Machine) -> None
     assert "нет записи" in drift["detail"] and str(install) in drift["detail"]
 
 
+def test_link_to_another_version_is_materialization(machine: Machine) -> None:
+    """Линк живой, но ведёт на другое дерево: реестр установки и диск разошлись.
+
+    Вариант того же инцидента: в реестре установки уже 0.12.3, а `node_modules`
+    остался на живой 0.11.0 — payload есть, но не тот, о котором говорит omp.
+    """
+    old = machine.root / "cache" / "unica@unica-0.11.0"
+    old.mkdir(parents=True)
+    path = machine.project("retail", [("unica@unica", "project", "0.12.3")])
+    machine.consumer("retail", path, [("unica@unica", "project", "0.12.3")])
+    link = machine.link("unica@unica", "project", path)
+    link.unlink()
+    link.symlink_to(old)
+
+    result = machine.run(machine.write_registry(), "check", "--json")
+
+    assert result.returncode == 1
+    drift = json.loads(result.stdout)["consumers"][0]["drifts"][0]
+    assert drift["kind"] == "materialization"
+    assert "нет записи" in drift["detail"]
+    assert str(machine.root / "cache" / "unica@unica-0.12.3") in drift["detail"], \
+        "назван путь, о котором говорит реестр установки"
+
+
 def test_dead_install_path_is_materialization(machine: Machine) -> None:
     """Кэш снесён, линка нет: `installPath` из реестра установки не существует."""
     path = machine.project("wiped", [("ontoship@sot-omp-marketplace", "project", "0.4.0")])
