@@ -2,11 +2,16 @@
 node_type: ticket
 title: Политика проектных sticky-файлов — .omp/RULES.md и .omp/APPEND_SYSTEM.md версионируются
 service: _platform
-status: active
+status: archived
 updated: 2026-09-18
 links:
   part_of: [README.md]
+  implemented_by: [../../../scripts/consumers.py, ../../../tests/test_consumers.py]
 ---
+
+> **Отгружен 2026-09-18**, MR [#2](https://github.com/ntin60775/sot-omp-marketplace/pull/2),
+> коммит `b37c4b0`. Все критерии приёмки закрыты; на машине `check` — дрейф 0 ·
+> чисто 12, `erp-demo` позеленел без правок в проекте.
 
 # 02: Политика проектных sticky-файлов
 

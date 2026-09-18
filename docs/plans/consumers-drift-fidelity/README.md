@@ -2,7 +2,7 @@
 node_type: plan
 title: Точность дрейфа — материализация, непроверяемые плагины, политика проектных sticky-файлов
 service: _platform
-status: active
+status: archived
 updated: 2026-09-18
 links:
   documents: [../../../scripts/consumers.py, ../../../tests/test_consumers.py]
@@ -12,6 +12,12 @@ links:
 
 # Контракт: инструмент не врёт о состоянии поставки
 
+> **План закрыт 2026-09-18.** Оба тикета отгружены в `main`: 01 — MR
+> [#1](https://github.com/ntin60775/sot-omp-marketplace/pull/1), 02 — MR
+> [#2](https://github.com/ntin60775/sot-omp-marketplace/pull/2). На машине
+> `consumers.py check`: дрейф 0 · чисто 12 · неучтённых 0 (жёстких нет, остаются
+> осознанные `own-rules`), `python3 -m pytest tests/` — 86 passed.
+>
 > **Прогрилено 2026-09-18, два раунда.** Политика: оба проектных sticky-файла
 > уходят из `REQUIRED_IGNORES`. Объём: инструмент и политика — **разными
 > срезами** (два тикета). Материализация: **жёсткий** вид `materialization` и для
@@ -84,4 +90,5 @@ links:
 
 - [01 — Материализация и непроверяемые плагины](01-materialization-and-unversioned.md) —
   **archived** (MR [#1](https://github.com/ntin60775/sot-omp-marketplace/pull/1), 2026-09-18)
-- [02 — Политика проектных sticky-файлов](02-policy-project-sticky-files.md) — следующий ран
+- [02 — Политика проектных sticky-файлов](02-policy-project-sticky-files.md) —
+  **archived** (MR [#2](https://github.com/ntin60775/sot-omp-marketplace/pull/2), 2026-09-18)
