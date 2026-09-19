@@ -3,9 +3,9 @@ node_type: service
 title: GitMark CLI — движок базы знаний
 service: gitmark-cli
 status: active
-updated: 2026-09-14
+updated: 2026-09-19
 links:
-  documents: [../../../tests/test_gitmark.py]
+  documents: [../../../.omp/plugins/node_modules/ontoship/skills/kb-search/gitmark.py]
   relates_to: [../../reference/gitmark-ontology.md]
 ---
 
@@ -25,8 +25,9 @@ FTS5: `bm25()` по терминам ∪ trigram-токенайзер (подс�
   (каталог, git-subdir по тегу):
   `.omp/plugins/node_modules/ontoship/skills/kb-search/gitmark.py` —
   именно к нему обращаются скиллы и команды из рабочего проекта.
-- [tests/test_gitmark.py](../../../tests/test_gitmark.py) грузит модуль через `importlib`
-  по пути установленного плагина.
+- Тесты движка живут в его репозитории — `ntin60775/ontoship-omp`, `tests/test_gitmark.py`:
+  они грузят модуль через `importlib` по пути установленного плагина. В этом репозитории
+  своих тестов движка нет, поэтому ссылка — на источник, а не на файл.
 
 ## Подкоманды CLI
 
@@ -54,8 +55,9 @@ trigram опционален (exit 2, «fuzzy/substring-поиск будет о
 
 ## Lint: инварианты онтологии I1–I8
 
-`lint` обходит все md-файлы репозитория (обходя папки из рукописного подмножества
-`.gitignore`) и проверяет:
+`lint` обходит md-файлы так же, как их видит git (`ls-files --cached --others
+--exclude-standard`), — игнорируемое `.gitignore` не проверяется; без git работает
+фолбэк на рукописном подмножестве правил. Проверяет:
 
 - **I1** (ERR) — «несущий» документ в `docs/reference|ops|plans|decisions|services/`
   без frontmatter с `node_type` (README-индексы папок исключены);
@@ -68,14 +70,22 @@ trigram опционален (exit 2, «fuzzy/substring-поиск будет о
   service, reference, runbook, plan, decision, ticket. Реестр сервисов выводится
   per-repo: `services_vocab = {_platform} ∪ имена всех каталогов под docs/`, то есть
   появление папки `docs/services/<svc>/` легализует `service: <svc>` без правки кода;
-- **I3** (WARN) — сирота: документ несущего типа без входящих и исходящих связей;
-- **I4** (ERR) — битая markdown-ссылка на `.md`-файл;
+- **I3** (WARN) — сирота: документ несущего типа без входящих и исходящих связей в теле
+  **и** без собственного блока `links:`;
+- **I4** (ERR) — битая ссылка в теле **и** в `links:` frontmatter (все шесть типов), для
+  `.md`, каталогов и любых файлов: путь проверяется по файловой системе так, как его
+  разрешит читатель (title, обёртка `<…>`, `#якорь` и `:line`-селектор срезаются,
+  URL-кодирование снимается). Вне проверки — внешние URI, якоря и корне-абсолютные `/…`;
 - **I5** (WARN) — папка под `docs/` без `README.md`-индекса;
 - **I6** (WARN) — цель `supersedes:` не помечена `deprecated`/`archived`;
 - **I7** (ERR) — рассинхрон реестра команд (см. ниже);
 - **I8** (ERR/WARN) — модель онтологии разошлась с пакетной копией: тела
   `docs/ontology.md` и `skills/kb-curate/ontology.md` от первого `## ` обязаны
-  совпадать; ERR в репо-источнике пакета, WARN при плагинной установке.
+  совпадать; ERR в репо-источнике пакета, WARN при плагинной установке. Если своей
+  `docs/ontology.md` в проекте нет, проверять нечего.
+
+Модель в поставке — `skills/kb-curate/ontology.md` установленного плагина; здесь она
+пересказана только в объёме, нужном проекту, и **источник истины — поставка**.
 
 `--strict` даёт exit 1 при любой ошибке.
 
