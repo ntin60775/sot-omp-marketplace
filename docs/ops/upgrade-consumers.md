@@ -3,7 +3,7 @@ node_type: runbook
 title: Обновление потребителей каталога — реестр, раздача, снятие плоских копий
 service: _platform
 status: active
-updated: 2026-09-16
+updated: 2026-09-19
 links:
   documents: [../../scripts/consumers.py, ../../.consumers.json]
   depends_on: [../reference/consumer-registry.md, release-ontoship.md]
@@ -133,6 +133,26 @@ git mv .omp/rules/test-contour.md .omp/rules/erp-main-test-contour.md   # при
 | `реестр не найден` (exit 2) | свежий клон / новая машина — `.consumers.json` отсутствует | `init` + `discover --apply` (шаг 0) |
 | `upgrade` падает: `Runtime package name "X" conflicts with installed package "X"` | в `<project>/.omp/plugins/omp-plugins.lock.json` осталась запись по **runtime-имени** пакета (`1c-omp` при плагине `1c`) от прежней установки — установщик видит её как «установленный пакет» | убрать запись плагина из `lock` → `omp plugin upgrade <id>@<marketplace> --scope=project`. Не помогают `--force`, `uninstall`, `doctor --fix` и удаление симлинка (проверено 2026-09-17 на omp 18.2.4: 6 проектов из 7) |
 | после апгрейда в других проектах `<project>/.omp/plugins/node_modules/<pkg>` — битый симлинк | первый апгрейд снёс общий кэш `~/.omp/plugins/cache/plugins/<каталог>___<плагин>___<старая версия>`, а симлинки остальных проектов смотрели на него | `omp plugin upgrade <id>@<marketplace> --scope=project` в каждом затронутом проекте — перепривязывает на живую версию. `check` называет это дрейфом `materialization` (exit 1) с путём записи и её целью — раньше он показывал «чисто», потому что читал реестр маркетплейса, а не материализацию в `node_modules` |
+
+**Апгрейд одного проекта сносит кэш у всех — раскатка машинно-атомарна.** Кэш
+`~/.omp/plugins/cache/plugins/<каталог>___<плагин>___<версия>` общий на машину, а
+`node_modules` проектов — симлинки в него; `omp plugin upgrade` удаляет замещаемую
+версию. Поэтому «сначала один проект, потом остальные» само по себе не работает: либо
+все разом (`upgrade --yes`), либо ни один.
+
+Если проверить апгрейд на одном проекте всё же нужно (dogfood каталога, проверка
+релиза), старую версию возвращают в кэш из тега плагина — тогда остальные проекты
+продолжают работать на ней до общей раскатки:
+
+```bash
+CACHE=~/.omp/plugins/cache/plugins/<каталог>___<плагин>___<старая версия>
+git -C <репо плагина> archive vX.Y.Z .omp | tar -x -C "$CACHE" --strip-components=1
+```
+
+Проверено 2026-09-19: апгрейд каталога на `ontoship 0.4.7` оставил 11 потребителей с
+битыми симлинками; кэш `0.4.5` восстановлен из тега `v0.4.5`, `check` снова показывает
+у них `stale` (а не `materialization`), `deploy-check` зелёный. Восстановленный каталог
+omp считает обычным попаданием в кэш — книга учёта версий не ведётся по содержимому.
 
 ## Ловушка: `--dry-run` у omp не dry-run
 

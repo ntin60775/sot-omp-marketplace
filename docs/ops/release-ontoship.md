@@ -3,7 +3,7 @@ node_type: runbook
 title: Релиз плагина
 service: _platform
 status: active
-updated: 2026-09-16
+updated: 2026-09-19
 links:
   documents: [../../.omp-plugin/marketplace.json]
   relates_to: [../decisions/plugin-delivery.md]
@@ -53,6 +53,12 @@ links:
    Все потребители машины разом — реестром: `python3 scripts/consumers.py check`
    (что обновится и где стоит `pin`) → `upgrade` → `verify`. Реестр, виды дрейфа и
    контракт инструмента — [реестр потребителей](../reference/consumer-registry.md).
+
+   **Раскатка машинно-атомарна:** кэш версии общий, и первый же `upgrade` сносит
+   замещаемую версию — у остальных проектов симлинк плагина становится битым. «По
+   одному проекту» не выйдет; если апгрейд одного нужен для проверки, старую версию
+   возвращают в кэш из тега — рецепт и разбор в
+   [частых отказах](upgrade-consumers.md#6-частые-отказы).
 
    > **ВНИМАНИЕ: ловушка `--scope` по умолчанию.** `omp plugin install` и
    > `omp plugin upgrade` **без** `--scope` ставят плагин в **user-scope** — он
