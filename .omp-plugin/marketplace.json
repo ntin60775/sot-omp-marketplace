@@ -5,7 +5,7 @@
   },
   "metadata": {
     "description": "Личный маркетплейс omp-плагинов: контур 1С-разработки (1c) и KB/dev-flow (ontoship)",
-    "version": "0.3.15"
+    "version": "0.3.16"
   },
   "plugins": [
     {
@@ -30,10 +30,10 @@
       "source": {
         "source": "url",
         "url": "git@github.com:ntin60775/1c-omp.git",
-        "ref": "v0.1.5"
+        "ref": "v0.1.6"
       },
       "description": "Контур 1С-разработки: правила BSL, гейты Unica, навыки развёртывания контура и работы с расширением MCP_Сервер. Ставится на уровень проекта и требует unica@unica.",
-      "version": "0.1.5",
+      "version": "0.1.6",
       "keywords": [
         "1c",
         "bsl",
