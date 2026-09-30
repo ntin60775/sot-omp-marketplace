@@ -1,0 +1,34 @@
+{
+  "name": "dev-sot-omp-marketplace",
+  "owner": { "name": "sothale" },
+  "metadata": {
+    "description": "ZCode-адаптация sot-omp-marketplace: обёртки над omp-плагинами ontoship и 1c",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "ontoship",
+      "source": "./ontoship",
+      "version": "0.4.8",
+      "description": "База знаний на markdown+git и dev-flow: поиск по KB (GitMark), курация, контракт ship",
+      "displayName": "OntoShip",
+      "displayName_i18n": { "ru": "OntoShip" },
+      "description_i18n": {
+        "ru": "База знаний на markdown+git и dev-flow: поиск по KB (GitMark), курация, контракт ship"
+      },
+      "category": "productivity"
+    },
+    {
+      "name": "1c",
+      "source": "./1c",
+      "version": "0.1.8",
+      "description": "Контур 1С-разработки: правила BSL, навыки развёртывания контура и MCP_Сервер (без гейтов Unica)",
+      "displayName": "1C",
+      "displayName_i18n": { "ru": "1С" },
+      "description_i18n": {
+        "ru": "Контур 1С-разработки: правила BSL, навыки развёртывания контура и MCP_Сервер (без гейтов Unica)"
+      },
+      "category": "developer-tools"
+    }
+  ]
+}
